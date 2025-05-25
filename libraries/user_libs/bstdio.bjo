@@ -1,0 +1,13 @@
+
+
+
+
+// PRINTING TO STDOUT
+extern func void print(uint8 x);
+extern func void print(uint16 x);
+extern func void print(uint32 x);
+extern func void print(int8 x);
+extern func void print(int16 x);
+extern func void print(int32 x);
+extern func void print(char c);
+extern func void print(str s);

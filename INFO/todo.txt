@@ -1,0 +1,43 @@
+
+///// TODO:
+8. increment and decrement (++ and --) and reassignments like x += y
+
+9. lvalue 
+
+///// DONE 
+1. use the register that best fits the size of the variable. Risk of truncation issues otherwise
+
+3. Constant folding
+
+
+2. generate all global stuff in the first pass. after that, do a jmp .main, which is a label indicating the main() function.
+   we can safely have all the other labels/functions then over there. i think.
+
+4. Expect-Match approach register type and size. Within function calls we expect the register to be FPR and match the size of the parameter.
+   Within assignments we expect the register to be GPR and match the size of the assignment. 
+
+5. 16-byte align the stack for System V ABI compliance. weight (locals in a function) + 8 (push rbp) = 16 * m, where m natural >= 1, best case scenario 
+   when weight + 8 is already a multiple of 16, no overallocation. worst case scenario when weight + 8 = 16 * m - 1, for a given m; then we have 15 bytes    of overallocation
+
+
+7. How to name labels for overloaded functions? 
+   -> Name labels with function name plus parameters
+
+
+6. Modify compiler for assembly defined functions, like print().
+   -> Extern function ast node 
+
+
+
+/////CONSIDERATIONS
+1. Objects definitions inside functions ===> Global objects
+2. Only allow declarations/assignments in global scope?
+3. Only one level dereference to fields:  (*ptr_to_instance).field_name ALLOWED / (**double_ptr_to_instance).field_name NOT ALLOWED
+4. Max unsigned integer: 2 ^ 32 - 1.  Max integer: 2147483647. Min integer: -2147483647.   2 ^ 31 - 1
+5. Function overload sensitive to differences between different types of int (maybe that's good?)
+6. (*ptr + 1) SHOULD BE ( *ptr + 1 * sizeof(type pointed at by ptr) )      (maybe that provides more control?)
+7. sizeof(type) needs "object" keyword if calculating the size of an Object
+8. Immediate positive numbers are assumed to be "uintX", programmer's responsability. 
+9. Variable name "__foreach_counterX" reserved for inner counter in foreach loop.
+
+        

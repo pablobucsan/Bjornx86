@@ -1,0 +1,15 @@
+#use "libraries/user_libs/bstdio.bjo"
+
+func void main()
+{
+    int8 a = 10;
+    char c = 'A';
+    c = 'B';
+    print(c);
+
+    for (uint8 i = 0; i < 5; i += 1)
+    {
+        a = a - i;
+        print(a);
+    }
+}

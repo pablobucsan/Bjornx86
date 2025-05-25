@@ -1,0 +1,52 @@
+< x >  ----> many x
+
+
+program := <statement>
+
+
+statement           := assignment | reassignment | ptrReassignment | fieldReassignment |declaration | emptyStmt | whileLoop | forLoop | funcDef
+                                  | objectDef    | ifStatement       | ptrFieldReassignment   | system_call
+                                  | useDirective | callbackAssignment  | stdAloneFuncCall
+                                  | foreachLoop  | enumDef 
+
+emptyStmt               := ";"
+useDirective            := "#" "use" "\"" filePath "\""
+declaration             := ( ( "object"? identifier ) | builtinType | ptr "<" ("object"? identifier ) | builtinType | ("ptr" "<" type ">" ) ">" ) identifier ";"
+assignment              := lvalue "=" expression ";"
+lvalue                  := "*" expression | ( ( "object"? identifier ) | builtinType | ptr "<" ("object"? identifier) | builtinType ">" ) identifier
+reassignment            := ( ("*"  identifier) | identifier ) "assign_sym" expression ";"
+ptrReassignment         := <"*"> identifier "assign_sym" expression ";"
+fieldReassignment       := identifier "." identifier "assign_sym" expression ";"
+ptrFieldReassignment    := "(" "*" identifier ")" "." identifier "assign_sym" expression ";"
+expression              := < terms operator term > | < expression >
+term                    := < unit operator unit  >
+unit                    := identifier | identifier "." identifier | number | char | str | funcCall | "(" expression ")" 
+                                      | typeCast | sizeCalc
+
+callbackAssignment      := "callback" identifier = identifier "( <type "," > )"
+sizeCalc                := "sizeof" "(" expression | type ")"
+typeCast                := (type) expression
+funcCall                := identifier + "(" <expression> ","  ")"
+system_call             := "SYSCALL_PRINT" ( identifier | number | str | char | bool);
+stdAloneFuncCall        := funcCall
+
+ifStatement             := "if" "(" expression ")" "{" <statement> "}"
+whileLoop               := "while" "(" expression ")" "{" <statement> "}"
+forLoop                 := "for" "(" assignment ";" expression ";" reassignment ")" "{" <statement> "}"
+foreachLoop             := "foreach" "(" type "identifier" "in" expression "within" "(" expression "," expression ")" "{" <statement> "}" 
+funcDef                 := "func" type identifier "(" < (funcParam | type identifier) "," > ")" "{" <statement> "}"
+funcParam               := identifier "(" < (funcParam | type identifier) "," > ")" "=" ">" type
+objectDef               := "object" identifier ("inherits" identifier)? "{" <declaration> "}"
+enumDef                 := "enum" identifier "{" <declaration> "}"
+
+identifier          := <[a..zA..Z]>  + "_"
+number              := identifier | <[0...9]>
+builtinType         := "void" | "int32" | "int16" | "int8" | "str" | "char" | "bool" | "void" | "ptr < "<" type ">" > "
+symbol              := "(" | ")" | "{" | "}" | ";" | "." 
+assign_sym          := "=" | "+=" | "-="
+operator            := "+" | "-" | "*" | "/" | ">" | "<" | "&" | "==" | "<=" | ">=" | "!" | "&&" | "||"
+
+
+
+
+

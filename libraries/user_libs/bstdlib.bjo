@@ -1,0 +1,21 @@
+
+
+ptr<any> NONE = (ptr<any>)-1;
+
+
+//Later provide API to code malloc directly in Bjorn
+func ptr<any> malloc(uint16 size)
+{
+  ptr<any> address;
+  SYSCALL_BMALLOC size;
+  SYSCALL_CATCH_4 &address;
+  return address;
+}
+
+
+func void free(ptr<any> p, uint16 size)
+{
+  SYSCALL_THROW size;
+  SYSCALL_BFREE p;
+}
+
