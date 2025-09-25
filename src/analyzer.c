@@ -268,24 +268,35 @@ void compare_ret_type(char *func_name, char *declared, char *actual) {
     exit(1);
 }
 
-void compare_types(char *identifier, char *declared, char *actual) 
+
+void compare_reassign_types(int line_number, char *lvalue_type, char *rvalue_type)
 {
-    //printf("Comparing types %s and %s \n", declared, actual);
-    // Use the same rules as return type checking
+    char *declared = lvalue_type;
+    char *actual = rvalue_type;
     if (strcmp(declared, actual) == 0) return;
-    
-    if (is_type_int(declared) && is_type_int(actual)) 
+     
+    if (is_type_array(declared) != is_type_array(actual))
     {
-        int declared_rank = (strstr(declared, "8") ? 1 : (strstr(declared, "16")) ? 2 : 3);
-        int actual_rank = (strstr(actual, "8") ? 1 : (strstr(actual, "16")) ? 2 : 3);
+        fprintf(stderr, "Src: '%s' . Reassignment in L=%i: LValue expects type: '%s' but got: '%s'\n", tracker.current_src_file, line_number ,declared, actual);
+        exit(1);
+    }
+    
+    
+    char *declared_base = get_base_type(declared);
+    char *actual_base = get_base_type(actual);
+   
+    if (is_type_int(declared_base) && is_type_int(actual_base)) 
+    {
+        int declared_rank = (strstr(declared_base, "8") ? 1 : (strstr(declared_base, "16")) ? 2 : 3);
+        int actual_rank = (strstr(actual_base, "8") ? 1 : (strstr(actual_base, "16")) ? 2 : 3);
         
-        int declared_unsigned = is_type_unsigned_int(declared);
-        int actual_unsigned = is_type_unsigned_int(actual);
+        int declared_unsigned = is_type_unsigned_int(declared_base);
+        int actual_unsigned = is_type_unsigned_int(actual_base);
         
         if (declared_unsigned && !actual_unsigned) 
         {
-            fprintf(stderr, "Variable %s: Expects unsigned: %s, but actual type is signed: %s\n",
-                    identifier, declared, actual);
+            fprintf(stderr, "Src: '%s'. Reassignment in L=%i: LValue expects unsigned: %s, but actual type is signed: %s\n",
+                    tracker.current_src_file, line_number, declared, actual);
             exit(1);
         }
         
@@ -302,33 +313,109 @@ void compare_types(char *identifier, char *declared, char *actual)
     
 
     //enum type and uint8 are the same 
-    if ( (is_type_enum( gb_enumTable ,declared) && strcmp(actual, "uint8") == 0 )  || 
-        ( strcmp(declared, "uint8") == 0 && is_type_enum(gb_enumTable, actual) ))
+    if ( (is_type_enum( gb_enumTable ,declared_base) && strcmp(actual_base, "uint8") == 0 )  || 
+        ( strcmp(declared_base, "uint8") == 0 && is_type_enum(gb_enumTable, actual_base) ))
     {
         return;
     }
 
     //chars and uint8 are the same
-    if ((strcmp(declared, "char") == 0 && strcmp(actual, "uint8") == 0) ||
-        (strcmp(actual, "char") == 0 && strcmp(declared, "uint8") == 0)) 
+    if ((strcmp(declared_base, "char") == 0 && strcmp(actual_base, "uint8") == 0) ||
+        (strcmp(actual_base, "char") == 0 && strcmp(declared_base, "uint8") == 0)) 
     {
         return;
     }
     
     //ptr char and str are the same
-    if ((strcmp(declared, "ptr char") == 0 && strcmp(actual, "str") == 0) ||
-        (strcmp(declared, "str") == 0 && strcmp(actual, "ptr char") == 0)) 
+    if ((strcmp(declared_base, "ptr char") == 0 && strcmp(actual_base, "str") == 0) ||
+        (strcmp(declared_base, "str") == 0 && strcmp(actual_base, "ptr char") == 0)) 
     {
         return;
     }
     
 
-    if (strncmp(declared, "ptr", 3) == 0 && strcmp(actual, "ptr any") == 0) {
+    if (strncmp(declared_base, "ptr", 3) == 0 && strcmp(actual_base, "ptr any") == 0) {
         return;
     }
     
-    fprintf(stderr, "Variable %s: Type mismatch. Expected %s, got %s\n",
-            identifier, declared, actual);
+    fprintf(stderr, "Src: '%s' . Reassignment in L=%i: LValue expects type: '%s', but got: '%s'\n",
+            tracker.current_src_file, line_number, declared, actual);
+    exit(1);
+
+}
+
+void compare_types(Symbol *s, char *declared, char *actual) 
+{
+    char *identifier = s->identifier;
+    //printf("Comparing types %s and %s \n", declared, actual);
+    // Use the same rules as return type checking
+    if (strcmp(declared, actual) == 0) return;
+     
+    if (is_type_array(declared) != is_type_array(actual))
+    {
+        fprintf(stderr, "Src: '%s' . Variable %s defined in L=%i: Expects type: '%s' but got: '%s'\n", tracker.current_src_file, identifier, s->line_number ,declared, actual);
+        exit(1);
+    }
+    
+    
+    char *declared_base = get_base_type(declared);
+    char *actual_base = get_base_type(actual);
+   
+    if (is_type_int(declared_base) && is_type_int(actual_base)) 
+    {
+        int declared_rank = (strstr(declared_base, "8") ? 1 : (strstr(declared_base, "16")) ? 2 : 3);
+        int actual_rank = (strstr(actual_base, "8") ? 1 : (strstr(actual_base, "16")) ? 2 : 3);
+        
+        int declared_unsigned = is_type_unsigned_int(declared_base);
+        int actual_unsigned = is_type_unsigned_int(actual_base);
+        
+        if (declared_unsigned && !actual_unsigned) 
+        {
+            fprintf(stderr, "Src: '%s'. Variable %s defined in L=%i: Expects unsigned: %s, but actual type is signed: %s\n",
+                    tracker.current_src_file, identifier, s->line_number,declared, actual);
+            exit(1);
+        }
+        
+       /* 
+        if (actual_rank > declared_rank) 
+        {
+            fprintf(stderr, "Variable %s: Possible overflow converting %s to %s\n",
+                    identifier, actual, declared);
+            exit(1);
+        }
+        */
+        return;
+    }
+    
+
+    //enum type and uint8 are the same 
+    if ( (is_type_enum( gb_enumTable ,declared_base) && strcmp(actual_base, "uint8") == 0 )  || 
+        ( strcmp(declared_base, "uint8") == 0 && is_type_enum(gb_enumTable, actual_base) ))
+    {
+        return;
+    }
+
+    //chars and uint8 are the same
+    if ((strcmp(declared_base, "char") == 0 && strcmp(actual_base, "uint8") == 0) ||
+        (strcmp(actual_base, "char") == 0 && strcmp(declared_base, "uint8") == 0)) 
+    {
+        return;
+    }
+    
+    //ptr char and str are the same
+    if ((strcmp(declared_base, "ptr char") == 0 && strcmp(actual_base, "str") == 0) ||
+        (strcmp(declared_base, "str") == 0 && strcmp(actual_base, "ptr char") == 0)) 
+    {
+        return;
+    }
+    
+
+    if (strncmp(declared_base, "ptr", 3) == 0 && strcmp(actual_base, "ptr any") == 0) {
+        return;
+    }
+    
+    fprintf(stderr, "Src: '%s' . Variable '%s' defined in L=%i: Type mismatch. Expected '%s', got '%s'\n",
+            tracker.current_src_file, identifier, s->line_number, declared, actual);
     exit(1);
 }
 
@@ -1049,21 +1136,27 @@ int align_to(int offset, int alignment)
 
 int size_of_type(char *type)
 {
+    int n_elements = is_type_array(type);
+
+    char *type_to_eval = get_base_type(type);
+    
+
+
     //Builtin type
-    if (strcmp(type, "int32") == 0) { return 4; }
-    if (strcmp(type, "int16") == 0) {return 2;}
-    if (strcmp(type, "int8") == 0) {return 1;}
-    if (strcmp(type, "uint32") == 0) { return 4; }
-    if (strcmp(type, "uint16") == 0) {return 2;}
-    if (strcmp(type, "uint8") == 0) {return 1;}
-    if (strcmp(type, "char") == 0) { return 1; }
-    if (strcmp(type, "bool") == 0) { return 1; }
-    if (strcmp(type, "str") == 0) { return 4; }     //Pointer to another location in memory
-    if (strcmp(type, "any") == 0) { return 4; } //Used in ptr<any>
-    if (strcmp(type, "callback") == 0) { return 4; }
+    if (strcmp(type_to_eval, "int32") == 0) { return n_elements? 4 * n_elements : 4; }
+    if (strcmp(type_to_eval, "int16") == 0) {return n_elements? 2 * n_elements : 2;}
+    if (strcmp(type_to_eval, "int8") == 0) {return n_elements? 1 * n_elements : 1;}
+    if (strcmp(type_to_eval, "uint32") == 0) { return n_elements? 4 * n_elements : 4; }
+    if (strcmp(type_to_eval, "uint16") == 0) {return n_elements? 2 * n_elements : 2;}
+    if (strcmp(type_to_eval, "uint8") == 0) {return n_elements? 1 * n_elements : 1;}
+    if (strcmp(type_to_eval, "char") == 0) { return n_elements? 1 * n_elements : 1; }
+    if (strcmp(type_to_eval, "bool") == 0) { return n_elements? 1 * n_elements : 1; }
+    if (strcmp(type_to_eval, "str") == 0) { return n_elements? 8 * n_elements : 8; }     //Pointer to another location in memory
+    if (strcmp(type_to_eval, "any") == 0) { return n_elements? 8 * n_elements : 8; } //Used in ptr<any>
+    if (strcmp(type_to_eval, "callback") == 0) { return n_elements? 8 * n_elements : 8; }
     //If none of this, may be a pointer to some builtin data
     //If the first 3 chars of type is "ptr", then is 4 bytes. No matter the depth
-    if (strncmp(type, "ptr", 3) == 0) { return 4; }
+    if (strncmp(type_to_eval, "ptr", 3) == 0) { return n_elements? 8 * n_elements : 8; }
     
 
     if (is_type_enum(gb_enumTable, type)) { return 1; }
@@ -1084,9 +1177,11 @@ int size_of_type(char *type)
             curr_object = curr_object->parent;
         }
         
-        return size;
+        return n_elements? size * n_elements : size;
     }
 }
+
+
 
 char *get_base_type(char *type)
 {
@@ -1097,6 +1192,23 @@ char *get_base_type(char *type)
     }
     char *type_to_val = malloc(sizeof(char) * 50);
 
+    // If type is array, return base 
+    int size = is_type_array(type);    
+
+    if (size)
+    {
+        for (size_t i = 0; i < strlen(type); i++)
+        {
+            if (type[i] == ' ')
+            {
+                return type_to_val;
+            }
+
+            type_to_val[i] = type[i];
+        }
+    }
+
+    
     for (size_t i = strlen(type) - 1; i > 0; i--)
     {
         if (type[i] == ' ')
@@ -1108,6 +1220,8 @@ char *get_base_type(char *type)
             return type_to_val;
         }
     }
+
+
     //We didn't find any spaces, type must be base already
     return type;
 }
@@ -1145,20 +1259,18 @@ char *get_pointed_type(char *pointed_type, int deref_levels)
 
 char *get_type(ObjectTable *ot, EnumTable *et, char *type)
 {
-    //Type can be built-in, user defined, or a pointer to either of those.
+    //Type can be built-in, user defined, pointer to either of those or an array (int8 [size]).
     //What matters is that the base type exists. In ptr ptr ptr int16, what matters is that int16 exists
     //So use that instead
 
     char *type_to_validate = get_base_type(type);
-
+    
     //Check built-in types
     for (int i = 0; i < sizeof(types)/ sizeof(types[0]); i++)
     {
+        if (strcmp(type_to_validate, types[i]) == 0)
         {
-            if (strcmp(type_to_validate, types[i]) == 0)
-            {
-                return type;
-            }
+            return type;
         }
     }
 
@@ -1193,14 +1305,18 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
 {
     if (program == NULL || program->node_type == NODE_NULL) { Value v = {.type = "void"}; return v; }
     //printf("Analyzing node with type: ");
+    //
     //printf(" %i \n", program->node_type);
     switch (program->node_type)
     {
 
         case NODE_USE_DIRECTIVE:
         {
+            char *src_file = tracker.current_src_file;
+            tracker.current_src_file = program->use_node.filepath;
             Value r = {.type = "void"};
             r = analyze(program->use_node.program, current_st, current_ft, script_mode);
+            tracker.current_src_file = src_file;
             return r;
         }
         case NODE_BLOCK:
@@ -1260,6 +1376,7 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
                     s->offset = (f->local_symbols->count == 0)? 0 : lookup_identifierByIndex(f->local_symbols, s->index - 1)->offset +
                                                           size_of_type(lookup_identifierByIndex(f->local_symbols, s->index - 1)->type);
                     s->offset = align_to(s->offset, size_of_type(s->type));
+                    
 
                     s->declaration_ctx = get_current_context();
                     s->ctx_block_id = assign_ctx_block_id(script_mode);
@@ -1419,11 +1536,13 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
         case NODE_IF:
         {
             
-            analyze(program->if_node.condition_expr, current_st, current_ft, script_mode);
+            Value condition = analyze(program->if_node.condition_expr, current_st, current_ft, script_mode);
             //Push an IF context 
             push_context(CTX_IF);
-
+            
             Value if_value = analyze(program->if_node.body, current_st, current_ft, script_mode);
+
+            program->if_node.condition_size = size_of_type(condition.type);
             Value else_value = {.type = "void"};
             pop_context();
 
@@ -1435,11 +1554,6 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
 
             }
 
-            //If there is no else body, or else body returns void, return whatever if body returns
-            if (program->if_node.else_body == NULL)
-            {
-                return if_value;
-            }
            return if_value;
         }
 
@@ -1775,23 +1889,6 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             break;
         }
 
-
-
-        case NODE_INSTANCE:
-        {
-            //Get the object identifier
-            Symbol *instance = lookup_identifier(current_st, context.current_scope,program->instance_node.instance_identifier);
-            //Get the type of the instance
-            char *type = get_type(gb_objectTable, gb_enumTable, instance->type);
-            //Get the object with such type
-            Object *o = lookup_object(gb_objectTable, type);
-            //Get the field type
-            Symbol *s = lookup_field(o, program->instance_node.field_identifier);
-
-            Value v = {.type = s->type};
-            return v;
-        }
-
         case NODE_BINARY_OP:
         {
             Value l = analyze(program->binary_op_node.left, current_st, current_ft, script_mode);
@@ -1802,15 +1899,6 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             validate_binary_op(program->binary_op_node.op, l.type, r.type);
 
             return l;
-        }
-
-        case NODE_SYSCALL:
-        {
-            //Don't know what to analyze here
-            analyze(program->syscall_node.operand, current_st, current_ft, script_mode);
-            //Value to ret for statements with no return value
-            Value ret = {.type = "void"};
-            return ret;
         }
 
         case NODE_RETURN:
@@ -1824,9 +1912,52 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             r = analyze(program->return_node.return_expr, current_st, current_ft, script_mode);
 
             return r;
-
         }
 
+        case NODE_ARRAY_INIT:
+        {
+            char *last_type = NULL;
+            for (int i = 0; i < program->array_init_node.size; i++)
+            {
+                Value v = analyze(program->array_init_node.elements[i], current_st, current_ft, script_mode);   
+                if (last_type != NULL && strcmp(v.type, last_type) != 0)
+                {
+                    fprintf(stderr, "Type mixing in array initializer: Got '%s' and '%s' \n", last_type , v.type);
+                    exit(1);
+                }
+
+                last_type = v.type;
+            }
+            
+            char *return_type = malloc(sizeof(char) * 100); 
+            sprintf(return_type, "%s [%i]", last_type, program->array_init_node.size);
+            Value result = {.type = return_type};
+            return result;
+        }
+        
+        case NODE_SUBSCRIPT:
+        {
+            Symbol *arr = lookup_identifier(current_st, context.current_scope, program->subscript_node.base_identifier);
+            if (!is_type_array(arr->type))
+            {
+                fprintf(stderr, "Src: %s. Array subscription in L=%i. Variable '%s' with type '%s' is not subscriptable.\n", 
+                        tracker.current_src_file, program->subscript_node.line_number, arr->identifier, arr->type);
+                exit(1);
+            }
+            Value base = analyze(program->subscript_node.base, current_st, current_ft, script_mode);
+            Value index = analyze(program->subscript_node.index, current_st, current_ft, script_mode);
+            program->subscript_node.index_size = size_of_type(index.type); 
+            if (!is_type_int(index.type))
+            {
+                fprintf(stderr, "Src: %s . Array subscription in L=%i. Index is expected to be of type integer (signed or unsigned), but got: '%s'\n",
+                        tracker.current_src_file, program->subscript_node.line_number, index.type);
+                exit(1);
+            }
+
+            Value result = {.type = get_base_type(base.type)};
+            return result;
+        }
+        
         case NODE_ASSIGNMENT:
         {
             //Create a symbol
@@ -1840,126 +1971,42 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             s->scope = assign_symbol_scope(script_mode);
             s->declaration_ctx = get_current_context();
             s->ctx_block_id = assign_ctx_block_id(script_mode);
+            s->line_number = program->assignment_node.line_number;
             //Add symbol to table
             add_symbol(current_st, s);
             //Analyze the expression
             Value v = analyze(program->assignment_node.expression, current_st, current_ft, script_mode);
-            //Type mismatch between symbol declaration and actual value
-            compare_types(s->identifier, s->type, v.type);
 
-            //Value to ret for statements with no return value
+            //Type mismatch between symbol declaration and actual value
+            compare_types(s, s->type, v.type);
+            
+
+           //Value to ret for statements with no return value
             Value ret = {.type = "void"};
             return ret;
         }
-
-        case NODE_PTR_REASSIGNMENT:
-        {
-
-            //Analyze the left expression
-            Value l = analyze(program->ptr_reassignment_node.lvalue, current_st, current_ft, script_mode);
-
-            // Copy the pointer type to avoid modifying the original string
-            char *ptr_type = malloc(strlen(l.type) + 1);
-            strcpy(ptr_type, l.type);
-
-            // Resolve the final type after dereferencing
-            char *final_type = resolve_final_ptr_type(ptr_type, program->ptr_reassignment_node.deref_level);
-
-            program->ptr_reassignment_node.deref_type = l.type;
-
-            // Analyze the expression being assigned
-            Value v = analyze(program->ptr_reassignment_node.expression, current_st, current_ft, script_mode);
-
-            // Compare the resolved type with the expression type
-            compare_types("lvalue", final_type, v.type);
-
-            // Free the allocated memory
-            free(ptr_type);
-            free(final_type);
-            Value r = {.type = "void"};
-            return r;
-        }
-
-
+        
+        
         case NODE_REASSIGNMENT:
         {
             //Get the symbol to reassign
-            Symbol *s = lookup_identifier(current_st, context.current_scope,  program->reassignment_node.identifier);
+            Value lvalue = analyze(program->reassignment_node.lvalue, current_st, current_ft, script_mode);
+
+            program->reassignment_node.size = size_of_type(get_base_type(lvalue.type));
             //Analyze the expression
-            Value v = analyze(program->reassignment_node.expression,current_st, current_ft, script_mode);
+            Value rvalue = analyze(program->reassignment_node.expression,current_st, current_ft, script_mode);
+            
 
+            compare_reassign_types(program->reassignment_node.line_number, lvalue.type, rvalue.type);
             //printf("Comparing between %s and %s \n", s->type, v.type);
-
-            compare_types(s->identifier, s->type, v.type);
+           
 
             //Value to ret for statements with no return value
             Value ret = {.type = "void"};
             //printf("returning from reassignment with type: %s \n",ret.type );
             return ret;
         }
-
-        case NODE_INSTANCE_REASSIGNMENT:
-        {
-            //Get the object identifier
-            Symbol *instance = lookup_identifier(current_st, context.current_scope, program->instance_node.instance_identifier);
-            //Get the type of the instance
-            char *type = get_type(gb_objectTable, gb_enumTable, instance->type);
-            //Get the object with such type
-            Object *o = lookup_object(gb_objectTable, type);
-            //Get the field type
-            Symbol *s = lookup_field(o, program->instance_node.field_identifier);
-
-            //Analyze the expression
-            Value v = analyze(program->field_reassign_node.expression, current_st, current_ft, script_mode);
-
-            compare_types(s->identifier, s->type, v.type);
-
-            //Value to ret for statements with no return value
-            Value ret = {.type = "void"};
-            return ret;
-
-        }
-
-        case NODE_PTR_FIELDREASSIGNMENT:
-        {
-            Symbol *ptr_to_instance = lookup_identifier(current_st, context.current_scope, program->ptr_fieldreassign_node.ptr_identifier);
-
-            char *whitespace = strchr(ptr_to_instance->type, ' ');
-            char *pointed_type = whitespace + 1;
-
-            pointed_type = get_type(gb_objectTable, gb_enumTable, pointed_type);
-
-            Object *o = lookup_object(gb_objectTable, pointed_type);
-
-            Symbol *s = lookup_field(o, program->ptr_fieldreassign_node.field_identifier);
-
-            Value v = analyze(program->ptr_fieldreassign_node.expression, current_st, current_ft, script_mode);
-
-            compare_types(s->identifier, s->type, v.type);
-
-            //Value to ret for statements with no return value
-            Value ret = {.type = "void"};
-            return ret;
-        }
-
-        case NODE_DEREF_FIELD:
-        {
-            //Analyze the between parenthesis expression
-            Value v = analyze(program->deref_field_node.pointer_expr, current_st, current_ft, script_mode);
-
-            char *whitespace = strchr(v.type, ' ');
-            char *pointed_type = whitespace + 1;
-            pointed_type = get_type(gb_objectTable, gb_enumTable, pointed_type);
-
-            program->deref_field_node.pointed_at_type = pointed_type;
-            //Get the object with the resultant type
-            Object *o = lookup_object(gb_objectTable, pointed_type);
-            //Get the field
-            Symbol *field = lookup_field(o, program->deref_field_node.field_name);
-            //Value to ret for statements with no return value
-            Value ret = {.type = field->type};
-            return ret;
-        }
+        
 
         case NODE_IDENTIFIER:
         {

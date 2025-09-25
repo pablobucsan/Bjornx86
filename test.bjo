@@ -1,15 +1,30 @@
 #use "libraries/user_libs/bstdio.bjo"
 
+func uint32 fib(uint8 count)
+{
+    if (count <= 1) { return 1; }
+
+    uint32 a = 0;
+    uint32 b = 1;
+    uint8 n = 2;
+    uint32 result;
+    
+    while (n <= count)
+    {
+
+        result = a + b;
+        a = b;
+        b = result;
+        n = n + 1;
+    }
+
+    return result;
+}
+
+
 func void main()
 {
-    int8 a = 10;
-    char c = 'A';
-    c = 'B';
-    print(c);
-
-    for (uint8 i = 0; i < 5; i += 1)
-    {
-        a = a - i;
-        print(a);
-    }
+    uint8 count = 40;
+    uint32 x = fib(count);
+    print(x);
 }

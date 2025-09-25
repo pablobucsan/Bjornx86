@@ -83,6 +83,7 @@ typedef struct Context
 
 typedef struct Symbol
 {
+    int line_number;
     char *type;                     //i32, char, str, bool
     char *identifier;               //name
     int scope;                      //0 = global, 1 = local
@@ -165,6 +166,11 @@ int isAllowedContext(ContextType ctx_type);
 ContextType get_current_context();
 
 ContextType get_current_bt_context();
+
+void pop_bt_context();
+
+void push_bt_context(ContextType ctx_type);
+
 
 
 #endif //ABC_TABLES_H

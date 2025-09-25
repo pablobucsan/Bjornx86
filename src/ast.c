@@ -13,6 +13,8 @@
 UsedFiles *usedFiles = NULL;
 
 
+
+
 char *read_file(const char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -137,6 +139,22 @@ void demand_token(Token **tokens, int *token_pos, TokenType type, char *value)
     exit(1);
 }
 
+int is_type_array(char *type)
+{
+    int i = 0;
+    while (type[i] != '\0')
+    {
+        if (type[i] == '[')
+        {
+            return type[i + 1] - '0';
+        }
+        i++;
+    }
+
+    return 0;
+}
+
+
 ASTNode *parseProgram(Token **tokens, int *token_pos)
 {
     ASTNode *program = malloc(sizeof(ASTNode ));
@@ -202,7 +220,9 @@ ASTNode *parseStatement(Token **tokens, int *token_pos)
     //Use directives
     if (tokens[*token_pos]->tk_type == TOKEN_SYMBOL && strcmp(tokens[*token_pos]->tk_value, "#") == 0)
     {
+        char *src_file = tracker.current_src_file;
         ASTNode *use_node = parseUseDirective(tokens, token_pos);
+        tracker.current_src_file = src_file;
         return use_node;
     }
     //Empty statements with ";"
@@ -295,6 +315,7 @@ ASTNode *parseStatement(Token **tokens, int *token_pos)
         (*token_pos)++;
         demand_token(tokens, token_pos,TOKEN_SYMBOL, "(");
         ast_if->if_node.condition_expr = parseExpression(tokens, token_pos);
+        // printf("ast_if->condition.expr type = %s \n", astTypeToStr(ast_if->if_node.condition_expr));
         demand_token(tokens, token_pos,TOKEN_SYMBOL, ")");
         demand_token(tokens, token_pos, TOKEN_SYMBOL, "{");
         ast_if->if_node.body = parseBlock(tokens, token_pos);
@@ -526,18 +547,6 @@ ASTNode *parseStatement(Token **tokens, int *token_pos)
         return ast_return;
     }
 
-    //System calls
-    else if (tokens[*token_pos]->tk_type == TOKEN_SYSCALL)
-    {
-        ASTNode *ast_syscall = malloc(sizeof(ASTNode));
-        ast_syscall->node_type = NODE_SYSCALL;
-        ast_syscall->syscall_node.syscall_identifier = tokens[*token_pos]->tk_value;
-        (*token_pos)++;
-        ast_syscall->syscall_node.operand = parseExpression(tokens, token_pos);
-        demand_token(tokens, token_pos, TOKEN_SYMBOL, ";");
-        return ast_syscall;
-    }
-    
     //Callback assignment
     else if (tokens[*token_pos]->tk_type == TOKEN_KEYWORD && strcmp(tokens[*token_pos]->tk_value, "callback") == 0)
     {
@@ -655,41 +664,25 @@ ASTNode *parseStatement(Token **tokens, int *token_pos)
         demand_token(tokens, token_pos, TOKEN_SYMBOL, ";");
         return ast_object;
     }
-
-    //Ptr field reassignment   "(" "*" ptr_id ")"
-    else if (strcmp(tokens[*token_pos]->tk_value, "(") == 0 && strcmp(tokens[*token_pos + 1]->tk_value, "*" ) == 0)
+    
+    // Reassignment 
+    else if (tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER || strcmp(tokens[*token_pos]->tk_value, "*") == 0)
     {
-        (*token_pos) += 2;
-        ASTNode *ptr_field = malloc(sizeof(ASTNode));
-        ptr_field->node_type = NODE_PTR_FIELDREASSIGNMENT;
+        ASTNode *node = malloc(sizeof(ASTNode));
+        node->node_type = NODE_REASSIGNMENT;
+        node->reassignment_node.lvalue = parseLValue(tokens, token_pos);
 
-        ptr_field->ptr_fieldreassign_node.ptr_identifier = tokens[*token_pos]->tk_value;
-        (*token_pos)++;
-        demand_token(tokens, token_pos, TOKEN_SYMBOL, ")");
-        demand_token(tokens, token_pos, TOKEN_SYMBOL, ".");
-        ptr_field->ptr_fieldreassign_node.field_identifier = tokens[*token_pos]->tk_value;
-        (*token_pos)++;
+        node->reassignment_node.line_number = tokens[*token_pos]->line_number;
+        node->reassignment_node.op = tokens[*token_pos]->tk_type;
+        *(token_pos) += 1;
+        node->reassignment_node.expression = parseExpression(tokens, token_pos);
 
-        ptr_field->ptr_fieldreassign_node.op = tokens[*token_pos]->tk_type;
-        (*token_pos)++;
-
-        ptr_field->ptr_fieldreassign_node.expression = parseExpression(tokens, token_pos);
         demand_token(tokens, token_pos, TOKEN_SYMBOL, ";");
-
-        return ptr_field;
-    }
-
-    // Assignments.
-    //assignment  := ( ( "object"? identifier ) | builtinType | ptr "<" ("object"? identifier) | builtinType ">" ) identifier  "=" expression ";"
-    // type         := "i32" | "str" | "char" | "bool" | "ptr" | ("object" identifier)
-    //Pointer declaration, assignment or reassignment
-    else if (strcmp(tokens[*token_pos]->tk_value, "*") == 0 || strcmp(tokens[*token_pos]->tk_value, "ptr") == 0)
-    {
-        ASTNode *node = parsePtrAssignment(tokens, token_pos);
-        demand_token(tokens, token_pos,TOKEN_SYMBOL, ";");
         return node;
     }
 
+    // Assignments.
+    //assignment := type identifier "=" expression ";"
     else if (tokens[*token_pos]->tk_type == TOKEN_TYPE || strcmp(tokens[*token_pos]->tk_value, "object") == 0
     ||  strcmp(tokens[*token_pos]->tk_value, "enum") == 0  ||tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER )
     {
@@ -788,7 +781,7 @@ ASTNode *parseUseDirective(Token **tokens,int *token_pos)
     (*token_pos) += 1;
 
     char *src = read_file(ast_node->use_node.filepath);
-    Token **file_tokens = tokenize(src);
+    Token **file_tokens = tokenize(src, ast_node->use_node.filepath);
     //print_tokens(file_tokens);
     int file_tokens_pos = 0;
 
@@ -797,90 +790,65 @@ ASTNode *parseUseDirective(Token **tokens,int *token_pos)
     return ast_node;
 }
 
-
-ASTNode *parsePtrAssignment(Token **tokens, int *token_pos)
+ASTNode *parseLValue(Token **tokens, int *token_pos)
 {
-    //Check if the current token is "*", in that case, pointer reassignment.
-    if (strcmp(tokens[*token_pos]->tk_value, "*") == 0 && tokens[*token_pos]->tk_type == TOKEN_OPERATOR)
-    {
-        //Expression is somewhat like **(ptr + *ptr2 + getOffset()  ). Has to resolve to a memory location
-        // Count the number of consecutive "*" operators (dereference levels)
-        int deref_levels = 0;
-        while (strcmp(tokens[*token_pos]->tk_value, "*") == 0 && tokens[*token_pos]->tk_type == TOKEN_OPERATOR)
-        {
-            deref_levels++;
-            (*token_pos)++;
-        }
-        //Parse the left value node.
-        
-        ASTNode *lvalue_node = parseExpression(tokens, token_pos);
+    return parseLValue_Precedence2(tokens, token_pos);
+}
 
-        expect_token(tokens, token_pos, TOKEN_SYMBOL, ")");
-        //Create the ptr reassignment node
-        ASTNode *ptr_reassignment_node = malloc(sizeof(ASTNode ));
-        ptr_reassignment_node->node_type = NODE_PTR_REASSIGNMENT;
-        //ptr_reassignment_node->ptr_reassignment_node.ptr_identifier = tokens[token_pos]->tk_value;
-        ptr_reassignment_node->ptr_reassignment_node.deref_level = deref_levels;
-        ptr_reassignment_node->ptr_reassignment_node.lvalue = lvalue_node;
-        //Advance past identifier
-       
-        ptr_reassignment_node->ptr_reassignment_node.op = tokens[*token_pos]->tk_type;
-        (*token_pos)++;
-         
-        ptr_reassignment_node->ptr_reassignment_node.expression = parseExpression(tokens, token_pos);
-        return ptr_reassignment_node;
-    }
 
-    //Pointer type case. Could be declaration or assignment
+
+
+// Function to resolve the type 
+char *resolveType(Token **tokens, int *token_pos)
+{
+
+    char *typeBuffer = malloc(sizeof(char) * 100);
+
     if (strcmp(tokens[*token_pos]->tk_value, "ptr") == 0)
     {
+        strcat(typeBuffer, resolvePtrType(tokens, token_pos));
+        return typeBuffer;
+    }
 
-        char *total_type = resolvePtrType(tokens, token_pos);
-
-        //Get the identifier
-        char *identifier = tokens[*token_pos]->tk_value;
-        //Advance past identifier
+    // Built-in type or identifier, then the type is literally that
+    if (tokens[*token_pos]->tk_type == TOKEN_TYPE || tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER) 
+    {
+        strcat(typeBuffer, tokens[*token_pos]->tk_value);
         (*token_pos)++;
 
-        //Check whether it is assignment or declaration
-        if ( expect_token(tokens, token_pos, TOKEN_ASSIGN, "=") == 1)
+        // Check for []
+        if (tokens[*token_pos]->tk_type == TOKEN_SYMBOL && strcmp(tokens[*token_pos]->tk_value,"[") == 0)
         {
+            (*token_pos)++;
+            if (tokens[*token_pos]->tk_type != TOKEN_NUMBER)
+            {
+                fprintf(stderr, "Array Assignment expects only a number as size, but got: '%s' \n", tokens[*token_pos]->tk_value);
+                exit(1);
+            }
+        
+            strcat(typeBuffer, " [");
+            if (strcmp(tokens[*token_pos]->tk_value, "0") == 0)
+            {
+                fprintf(stderr, "Cannot declare an array with size = 0\n"); 
+                exit(1);
+            }
 
-            //Create the assignment node
-            ASTNode *ast_assignment = malloc(sizeof(ASTNode ));
-            ast_assignment->node_type = NODE_ASSIGNMENT;
-            ast_assignment->assignment_node.type = total_type;
-            ast_assignment->assignment_node.identifier = identifier;
-            ast_assignment->assignment_node.expression = parseExpression(tokens, token_pos);
-            return ast_assignment;
+            strcat(typeBuffer, tokens[*token_pos]->tk_value);
+            (*token_pos)++;
+
+            demand_token(tokens, token_pos, TOKEN_SYMBOL, "]");
+            strcat(typeBuffer, "]");
         }
 
-        //Declaration
-        else if (strcmp(tokens[*token_pos]->tk_value, ";") == 0)
-        {
-            //Create the declaration node
-            ASTNode *ast_declaration_node = malloc(sizeof(ASTNode ));
-            ast_declaration_node->node_type = NODE_DECLARATION;
-            ast_declaration_node->declaration_node.type = total_type;
-            ast_declaration_node->declaration_node.identifier = identifier;
 
-            return ast_declaration_node;
-        }
-
-        else
-        {
-            fprintf(stderr, "Unexpected token while parsing statement starting with \"ptr\": %s \n", tokens[*token_pos]->tk_value);
-            exit(1);
-        }
-
+        return typeBuffer;
     }
-
-    else
-    {
-        fprintf(stderr, "Unexpected token while parsing statement ptr assignment: %s \n", tokens[*token_pos]->tk_value);
-        exit(1);
-    }
+    
+    fprintf(stderr, "Unexpected token when resolving type. Got: %s \n", tokens[*token_pos]);
+    exit(1);
+    
 }
+
 
 // Function to resolve the type of a pointer
 char *resolvePtrType(Token **tokens, int *token_pos)
@@ -956,153 +924,133 @@ char *resolvePtrType(Token **tokens, int *token_pos)
     return type;
 }
 
-//TODO: SIMPLIFY THIS?
-//assignment  := ( ( "object"? identifier ) | builtinType | ptr "<" ("object"? identifier) | builtinType ">" ) identifier  "=" expression ";"
+// assignment = type lvalue '=' expr;
+// type = object? identifier | enum? identifier | built-in type 
 ASTNode *parseAssignment(Token **tokens, int *token_pos)
 {
-    //This function is called whenever we encounter a TYPE, "object" or IDENTIFIER and no other case is possible
-
-    //Be within len(tokens)
-    if (tokens[*token_pos + 1]->tk_type == TOKEN_EOF || tokens[*token_pos + 2]->tk_type == TOKEN_EOF)
-    {
-        fprintf(stderr, "End of file reached before end of assignment. \n");
-        exit(1);
-    }
-
+    // Skip optinal 'object' | 'enum' keywords
     expect_token(tokens, token_pos, TOKEN_KEYWORD, "object");
     expect_token(tokens, token_pos, TOKEN_KEYWORD, "enum");
-    //Reassignment of instance field
-    if (tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER && strcmp(tokens[*token_pos + 1]->tk_value, ".") == 0 &&
-        tokens[*token_pos + 2]->tk_type == TOKEN_IDENTIFIER)
+
+    // Must have an identifier | built-in type at this point
+    if (tokens[*token_pos]->tk_type != TOKEN_IDENTIFIER && tokens[*token_pos]->tk_type != TOKEN_TYPE)
     {
-
-        //Instance node
-        ASTNode *ast_instance = malloc(sizeof(ASTNode));
-        ast_instance->node_type = NODE_INSTANCE_REASSIGNMENT;
-        ast_instance->field_reassign_node.instance_identifier = tokens[*token_pos]->tk_value;
-
-        //Advance past object instance identifier + "."
-        (*token_pos) += 2;
-        ast_instance->field_reassign_node.field_identifier = tokens[*token_pos]->tk_value;
-        //Advance past field name and "="
-        (*token_pos)++;
-
-        ast_instance->field_reassign_node.op = tokens[*token_pos]->tk_type;
-        (*token_pos)++;
-
-        ast_instance->field_reassign_node.expression = parseExpression(tokens, token_pos);
-        return ast_instance;
-    }
- 
-    // Check if the current token is a type (built-in or objectIdentifier)
-    int is_type = (tokens[*token_pos]->tk_type == TOKEN_TYPE || tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER) && 
-                    tokens[*token_pos + 1]->tk_type == TOKEN_IDENTIFIER;
-    if (!is_type)
-    {
-        // If not a type, it must be a reassignment
-        if (tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER && is_assignable_op(tokens,token_pos,1))
-        {
-            // Reassignment case
-            ASTNode *ast_reassignment = malloc(sizeof(ASTNode));
-            ast_reassignment->node_type = NODE_REASSIGNMENT;
-            ast_reassignment->reassignment_node.identifier = tokens[*token_pos]->tk_value;
-            (*token_pos)++; // Advance past the identifier
-            
-            ast_reassignment->reassignment_node.op = tokens[*token_pos]->tk_type;
-            (*token_pos)++;
-
-            ast_reassignment->reassignment_node.expression = parseExpression(tokens, token_pos);
-            return ast_reassignment;
-        }
-
-        else
-        {
-            fprintf(stderr, "Expected type or identifier for assignment. Got: %s\n", tokens[*token_pos]->tk_value);
-            exit(1);
-        }
-    }
-   
-    // At this point, we have a type (built-in or objectIdentifier) followed by an identifier
-    char *type = tokens[*token_pos]->tk_value; // ObjectType or built-in type
-    (*token_pos)++; // Advance past the type
-
-    // Ensure the next token is an identifier
-    if (tokens[*token_pos]->tk_type != TOKEN_IDENTIFIER)
-    {
-        fprintf(stderr, "Expected identifier after type: %s\n", type);
+        fprintf(stderr, "Expected type (Identifier | built-in type) in assignment.\n");
         exit(1);
     }
 
+    // At this point we have an identifier | type 
+    ASTNode *ast_assignment = malloc(sizeof(ASTNode));
+    ast_assignment->node_type = NODE_ASSIGNMENT;
+    
 
-    char *identifier = tokens[*token_pos]->tk_value; // Identifier
-    (*token_pos)++; // Advance past the identifier
+    ast_assignment->assignment_node.type = resolveType(tokens, token_pos);
 
-    // Check if this is an assignment or a declaration
-    if (tokens[*token_pos]->tk_type == TOKEN_ASSIGN && strcmp(tokens[*token_pos]->tk_value, "=") == 0)
+    // Need an identifier for the variable 
+    if (tokens[*token_pos]->tk_type != TOKEN_IDENTIFIER)
     {
-        // Assignment case
-        ASTNode *ast_assignment = malloc(sizeof(ASTNode));
-        ast_assignment->node_type = NODE_ASSIGNMENT;
-        ast_assignment->assignment_node.type = type;
-        ast_assignment->assignment_node.identifier = identifier;
+        fprintf(stderr, "Expected variable identifier in assignment.\n");
+        exit(1);
+    }
 
-        (*token_pos)++; // Advance past the "="
+    // At this point we have an identifier for the variable 
+    ast_assignment->assignment_node.identifier = tokens[*token_pos]->tk_value;
+    ast_assignment->assignment_node.line_number = tokens[*token_pos]->line_number;
+    *(token_pos) += 1;
+                
+    if (expect_token(tokens, token_pos, TOKEN_ASSIGN, "="))
+    {
+
+        // Special case. Expression begins with '[' -> array init 
+        if (strcmp(tokens[*token_pos]->tk_value, "[") == 0)
+        {
+            (*token_pos)++;
+            ast_assignment->assignment_node.expression = parseArrayInit(tokens, token_pos, ast_assignment->assignment_node.identifier);
+            return ast_assignment;
+        }
+
         ast_assignment->assignment_node.expression = parseExpression(tokens, token_pos);
         return ast_assignment;
     }
 
-    else
-    {
-        // Declaration case
-        // Rewind to the type token so parseDeclaration can handle it
-        (*token_pos) -= 2; // Go back to the type token
-        // Delegate to parseDeclaration
-        return parseDeclaration(tokens, token_pos);
-    }
-}
-
-ASTNode *parseDeclaration(Token **tokens,int *token_pos)
-{
-    // Check if the current token is "object" (optional) or "enum"
-    expect_token(tokens, token_pos, TOKEN_KEYWORD, "object");
-    expect_token(tokens, token_pos, TOKEN_KEYWORD, "enum");
-        // Ensure the next token is a type (built-in or objectIdentifier)
-    if (tokens[*token_pos]->tk_type == TOKEN_TYPE || tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER)
+    if (strcmp(tokens[*token_pos]->tk_value,";") == 0)
     {
         ASTNode *ast_declaration = malloc(sizeof(ASTNode));
         ast_declaration->node_type = NODE_DECLARATION;
+        ast_declaration->declaration_node.type = ast_assignment->assignment_node.type;
+        ast_declaration->declaration_node.identifier = ast_assignment->assignment_node.identifier;
 
-        //ptr type
-        if (strcmp(tokens[*token_pos]->tk_value, "ptr") == 0)
-        {
-            ast_declaration->declaration_node.type = resolvePtrType(tokens, token_pos);
-        }
-        else
-        {
-            ast_declaration->declaration_node.type = tokens[*token_pos]->tk_value; // ObjectType or built-in type
-            (*token_pos)++; // Move past the type
-        }
-        // Ensure the next token is an identifier
-        if (tokens[*token_pos]->tk_type != TOKEN_IDENTIFIER)
-        {
-            fprintf(stderr, "Expected identifier after type: %s\n", tokens[*token_pos - 1]->tk_value);
-            exit(1);
-        }
-
-        ast_declaration->declaration_node.identifier = tokens[*token_pos]->tk_value; // Identifier
-        (*token_pos)++; // Move past the identifier
+        free(ast_assignment);
         return ast_declaration;
     }
+}
 
-    else
+// Declaration  := type identifier ';'
+// type = object? identifier | enum? identifier | built-in type 
+ASTNode *parseDeclaration(Token **tokens,int *token_pos)
+{
+    // Skip optinals keywords "object" "enum"
+    expect_token(tokens, token_pos, TOKEN_KEYWORD, "object");
+    expect_token(tokens, token_pos, TOKEN_KEYWORD, "enum");
+
+    // Ensure the next token is a type (built-in or objectIdentifier)
+    if (tokens[*token_pos]->tk_type != TOKEN_TYPE && tokens[*token_pos]->tk_type != TOKEN_IDENTIFIER)
     {
-        fprintf(stderr, "Invalid token in declaration. Got: %s\n", tokens[*token_pos]->tk_value);
+        fprintf(stderr, "Expected type (Identifier | built-in type) in declaration.\n");
+        exit(1);
+    }
+    
+    // At this point we have an identifier | type 
+    ASTNode *ast_declaration = malloc(sizeof(ASTNode));
+    ast_declaration->node_type = NODE_DECLARATION;
+
+
+    ast_declaration->declaration_node.type = resolveType(tokens, token_pos);
+    (*token_pos)++;
+
+    // Need an identifier for the variable 
+    if (tokens[*token_pos]->tk_type != TOKEN_IDENTIFIER)
+    {
+        fprintf(stderr, "Expected variable identifier in declaration.\n");
         exit(1);
     }
 
+    // At this point we have an identifier for the variable 
+    ast_declaration->declaration_node.identifier = tokens[*token_pos]->tk_value;
+    
+    return ast_declaration;
+
+
 }
 
-//Expression handles '||'. Precedence 6.
+ASTNode *parseArrayInit(Token **tokens, int *token_pos, char *arr_name)
+{
+    ASTNode *ast_array = malloc(sizeof(ASTNode));
+    ast_array->node_type = NODE_ARRAY_INIT;
+    ast_array->array_init_node.capacity = 100;
+    ast_array->array_init_node.elements = malloc(sizeof(ASTNode *) * ast_array->array_init_node.capacity);
+    ast_array->array_init_node.arr_name = arr_name;
+    ast_array->array_init_node.size = 0;
+
+    while (tokens[*token_pos]->tk_type != TOKEN_EOF && strcmp(tokens[*token_pos]->tk_value, "]"))
+    {
+        if (ast_array->array_init_node.size + 1 > ast_array->array_init_node.capacity)
+        {
+            ast_array->array_init_node.capacity *= 2;
+            ast_array->array_init_node.elements = realloc(ast_array->array_init_node.elements, ast_array->array_init_node.capacity);
+        }
+
+        ast_array->array_init_node.elements[ast_array->array_init_node.size++] = parseExpression(tokens, token_pos);
+        expect_token(tokens, token_pos, TOKEN_SYMBOL, ",");
+    }
+    
+    demand_token(tokens, token_pos, TOKEN_SYMBOL, "]");
+    return ast_array;
+
+}
+
+
+//Expression handles '||'. Precedence 8.
 ASTNode *parseExpression(Token **tokens, int *token_pos)
 {
     //Empty expression
@@ -1113,7 +1061,7 @@ ASTNode *parseExpression(Token **tokens, int *token_pos)
         return ast_empty;
     }
 
-    ASTNode *left = parseExpr_Precedence5(tokens, token_pos);
+    ASTNode *left = parseExpr_Precedence7(tokens, token_pos);
 
     while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
            (strcmp(tokens[*token_pos]->tk_value, "||") == 0))
@@ -1126,27 +1074,47 @@ ASTNode *parseExpression(Token **tokens, int *token_pos)
         (*token_pos)++;
 
         //Create the right and binary op node
-        ASTNode *right = parseExpr_Precedence5(tokens, token_pos);
+        ASTNode *right = parseExpr_Precedence7(tokens, token_pos);
 
         ast_bin_op->binary_op_node.right = right;
         ast_bin_op->binary_op_node.left = left;
 
-        /*
-        if (left->node_type == NODE_NUMBER && right->node_type == NODE_NUMBER)
+            //Maybe there's only a left
+        left = ast_bin_op;
+    }
+
+    return left;
+}
+
+
+//Expression handles '&&'. Precedence 7.
+ASTNode *parseExpr_Precedence7(Token **tokens, int *token_pos)
+{
+
+    ASTNode *left = parseExpr_Precedence6(tokens, token_pos);
+
+    while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
+        (strcmp(tokens[*token_pos]->tk_value, "&&") == 0))
+    {
+
+        ASTNode *ast_bin_op = malloc(sizeof(ASTNode ));
+        ast_bin_op->node_type = NODE_BINARY_OP;
+        ast_bin_op->binary_op_node.op = tokens[*token_pos]->tk_value;
+        //Advance to the next token after operator
+        (*token_pos)++;
+
+        //Create the right and binary op node
+        ASTNode *right = parseExpr_Precedence6(tokens, token_pos);
+
+        ast_bin_op->binary_op_node.right = right;
+        ast_bin_op->binary_op_node.left = left;
+        
+        ASTNode *number = tryFoldBinary(left, right, ast_bin_op->binary_op_node.op);
+        if (number != NULL)
         {
-
-            int64_t lnumber = left->number_node.number_value;
-            int64_t rnumber = right->number_node.number_value;
-
-            int64_t result = foldBinOperation(lnumber, rnumber, ast_bin_op->binary_op_node.op);
-
-            ASTNode *ast_number = malloc(sizeof(ASTNode));
-            ast_number->node_type = NODE_NUMBER;
-            ast_number->number_node.number_value = result;
-
-            return ast_number;
+            left = number; 
+            continue;
         }
-        */
 
         //Maybe there's only a left
         left = ast_bin_op;
@@ -1155,15 +1123,59 @@ ASTNode *parseExpression(Token **tokens, int *token_pos)
     return left;
 }
 
+//Expr handles "!=", "==". Precedence 6
+ASTNode *parseExpr_Precedence6(Token **tokens, int *token_pos)
+{
+    //Left node comes from parsing the term
+    ASTNode *left = parseExpr_Precedence5(tokens, token_pos);
 
-//Expression handles '&&'. Precedence 4.
+    while ( tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
+            ( (strcmp(tokens[*token_pos]->tk_value, "!=") == 0)))
+
+    {
+
+
+        ASTNode *ast_bin_op = malloc(sizeof(ASTNode ));
+        ast_bin_op->node_type = NODE_BINARY_OP;
+        ast_bin_op->binary_op_node.op = tokens[*token_pos]->tk_value;
+        //Advance to the next token after operator
+        (*token_pos)++;
+
+        //Create the right and binary op node
+        ASTNode *right = parseExpr_Precedence5(tokens, token_pos);
+
+        ast_bin_op->binary_op_node.right = right;
+        ast_bin_op->binary_op_node.left = left;
+        
+        ASTNode *number = tryFoldBinary(left, right, ast_bin_op->binary_op_node.op);
+        if (number != NULL)
+        {
+            left = number; 
+            continue;
+        }
+
+        //Maybe there's only a left
+        left = ast_bin_op;
+    }
+
+    return left;
+}
+
+//Expression handles '>','<', "<=",">=". Precedence 5.
 ASTNode *parseExpr_Precedence5(Token **tokens, int *token_pos)
 {
+    //Left node comes from parsing the term
     ASTNode *left = parseExpr_Precedence4(tokens, token_pos);
 
-    while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
-        (strcmp(tokens[*token_pos]->tk_value, "&&") == 0))
+    while ( tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
+            (  (strcmp(tokens[*token_pos]->tk_value, ">") == 0) ||
+            (strcmp(tokens[*token_pos]->tk_value, "<") == 0) ||
+            (strcmp(tokens[*token_pos]->tk_value,"<=") == 0)  ||
+            (strcmp(tokens[*token_pos]->tk_value, ">=") == 0)  ||
+            (strcmp(tokens[*token_pos]->tk_value, "==") == 0 )))
+
     {
+
 
         ASTNode *ast_bin_op = malloc(sizeof(ASTNode ));
         ast_bin_op->node_type = NODE_BINARY_OP;
@@ -1191,15 +1203,15 @@ ASTNode *parseExpr_Precedence5(Token **tokens, int *token_pos)
     return left;
 }
 
-//Expr handles "!=", "==". Precedence 4
+//Expression handles '+' and '-'. Precedence 4.
 ASTNode *parseExpr_Precedence4(Token **tokens, int *token_pos)
 {
     //Left node comes from parsing the term
     ASTNode *left = parseExpr_Precedence3(tokens, token_pos);
 
-    while ( tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
-            ( (strcmp(tokens[*token_pos]->tk_value, "!=") == 0)))
-
+    while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
+           (strcmp(tokens[*token_pos]->tk_value, "+") == 0 ||
+            strcmp(tokens[*token_pos]->tk_value, "-") == 0))
     {
 
 
@@ -1220,86 +1232,6 @@ ASTNode *parseExpr_Precedence4(Token **tokens, int *token_pos)
         {
             left = number; 
             continue;
-        }
-
-        //Maybe there's only a left
-        left = ast_bin_op;
-    }
-
-    return left;
-}
-
-//Expression handles '>','<', "<=",">=". Precedence 3.
-ASTNode *parseExpr_Precedence3(Token **tokens, int *token_pos)
-{
-    //Left node comes from parsing the term
-    ASTNode *left = parseExpr_Precedence2(tokens, token_pos);
-
-    while ( tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
-            (  (strcmp(tokens[*token_pos]->tk_value, ">") == 0) ||
-            (strcmp(tokens[*token_pos]->tk_value, "<") == 0) ||
-            (strcmp(tokens[*token_pos]->tk_value,"<=") == 0)  ||
-            (strcmp(tokens[*token_pos]->tk_value, ">=") == 0)  ||
-            (strcmp(tokens[*token_pos]->tk_value, "==") == 0 )))
-
-    {
-
-
-        ASTNode *ast_bin_op = malloc(sizeof(ASTNode ));
-        ast_bin_op->node_type = NODE_BINARY_OP;
-        ast_bin_op->binary_op_node.op = tokens[*token_pos]->tk_value;
-        //Advance to the next token after operator
-        (*token_pos)++;
-
-        //Create the right and binary op node
-        ASTNode *right = parseExpr_Precedence2(tokens, token_pos);
-
-        ast_bin_op->binary_op_node.right = right;
-        ast_bin_op->binary_op_node.left = left;
-        
-        ASTNode *number = tryFoldBinary(left, right, ast_bin_op->binary_op_node.op);
-        if (number != NULL)
-        {
-            left = number; 
-            continue;
-        }
-
-        //Maybe there's only a left
-        left = ast_bin_op;
-    }
-
-    return left;
-}
-
-//Expression handles '+' and '-'. Precedence 2.
-ASTNode *parseExpr_Precedence2(Token **tokens, int *token_pos)
-{
-    //Left node comes from parsing the term
-    ASTNode *left = parseExpr_Precedence1(tokens, token_pos);
-
-    while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
-           (strcmp(tokens[*token_pos]->tk_value, "+") == 0 ||
-            strcmp(tokens[*token_pos]->tk_value, "-") == 0))
-    {
-
-
-        ASTNode *ast_bin_op = malloc(sizeof(ASTNode ));
-        ast_bin_op->node_type = NODE_BINARY_OP;
-        ast_bin_op->binary_op_node.op = tokens[*token_pos]->tk_value;
-        //Advance to the next token after operator
-        (*token_pos)++;
-
-        //Create the right and binary op node
-        ASTNode *right = parseExpr_Precedence1(tokens, token_pos);
-
-        ast_bin_op->binary_op_node.right = right;
-        ast_bin_op->binary_op_node.left = left;
-        
-        ASTNode *number = tryFoldBinary(left, right, ast_bin_op->binary_op_node.op);
-        if (number != NULL)
-        {
-            left = number; 
-            continue;
         }       
 
         //Maybe there's only a left
@@ -1310,11 +1242,11 @@ ASTNode *parseExpr_Precedence2(Token **tokens, int *token_pos)
 }
 
 
-//Expression handles "*" and "/". Precedence 1.
-ASTNode *parseExpr_Precedence1(Token **tokens, int *token_pos)
+//Expression handles "*" and "/". Precedence 3.
+ASTNode *parseExpr_Precedence3(Token **tokens, int *token_pos)
 {
     //Left node comes from parsing the term
-    ASTNode *left = parseUnit(tokens, token_pos);
+    ASTNode *left = parseExpr_Precedence2(tokens, token_pos);
 
     while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
            (strcmp(tokens[*token_pos]->tk_value, "*") == 0 ||
@@ -1330,7 +1262,7 @@ ASTNode *parseExpr_Precedence1(Token **tokens, int *token_pos)
         (*token_pos)++;
 
         //Create the right and binary op node
-        ASTNode *right = parseUnit(tokens, token_pos);
+        ASTNode *right = parseExpr_Precedence2(tokens, token_pos);
 
         ast_bin_op->binary_op_node.right = right;
         ast_bin_op->binary_op_node.left = left;
@@ -1348,6 +1280,127 @@ ASTNode *parseExpr_Precedence1(Token **tokens, int *token_pos)
 
     return left;
 }
+
+// Unary opeartions, only * allowed as lvalue
+ASTNode *parseLValue_Precedence2(Token **tokens, int *token_pos)
+{
+ 
+    ASTNode *operand = NULL;
+
+    while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
+           (strcmp(tokens[*token_pos]->tk_value, "*") == 0))
+    {
+         //Create a Unary Node
+        ASTNode *ast_unary = malloc(sizeof(ASTNode ));
+        ast_unary->node_type = NODE_UNARY_OP;
+        ast_unary->unary_op_node.op = tokens[*token_pos]->tk_value;
+        (*token_pos)++;
+        ast_unary->unary_op_node.right = parseExpr_Precedence1(tokens, token_pos);
+        
+        ASTNode *ast_number = tryFoldUnary(ast_unary->unary_op_node.right, ast_unary->unary_op_node.op);
+
+        if (ast_number != NULL)
+        {
+            operand = ast_number;
+            continue;
+        }
+
+        operand = ast_unary;
+    }
+
+    if (operand != NULL) { return operand; }
+
+    return parseExpr_Precedence1(tokens, token_pos);
+
+}
+
+// Unary operations (unary -, address &, dereference * ). Precedence 2
+ASTNode *parseExpr_Precedence2(Token **tokens, int *token_pos)
+{
+   
+    ASTNode *operand = NULL;
+
+    while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
+           (strcmp(tokens[*token_pos]->tk_value, "*") == 0 ||
+            strcmp(tokens[*token_pos]->tk_value, "&") == 0 ||
+            strcmp(tokens[*token_pos]->tk_value, "-") == 0))
+    {
+         //Create a Unary Node
+        ASTNode *ast_unary = malloc(sizeof(ASTNode ));
+        ast_unary->node_type = NODE_UNARY_OP;
+        ast_unary->unary_op_node.op = tokens[*token_pos]->tk_value;
+        (*token_pos)++;
+        ast_unary->unary_op_node.right = parseExpr_Precedence1(tokens, token_pos);
+        
+        ASTNode *ast_number = tryFoldUnary(ast_unary->unary_op_node.right, ast_unary->unary_op_node.op);
+
+        if (ast_number != NULL)
+        {
+            operand = ast_number;
+            continue;
+        }
+
+        operand = ast_unary;
+    }
+
+    if (operand != NULL) { return operand; }
+
+    return parseExpr_Precedence1(tokens, token_pos);
+}
+
+
+
+// Subscription and field access. [] and .  
+// Precedence 1.
+ASTNode *parseExpr_Precedence1(Token **tokens, int *token_pos)
+{
+    ASTNode *base = parseUnit(tokens, token_pos);
+
+
+    while (tokens[*token_pos]->tk_type == TOKEN_SYMBOL &&
+           (strcmp(tokens[*token_pos]->tk_value, "[") == 0 ||
+            strcmp(tokens[*token_pos]->tk_value, ".") == 0))
+    {
+        // Subscription 
+        if (strcmp(tokens[*token_pos]->tk_value, "[") == 0)
+        {
+            (*token_pos)++;
+            ASTNode *ast_subscript = malloc(sizeof(ASTNode));
+            ast_subscript->node_type = NODE_SUBSCRIPT;
+            ast_subscript->subscript_node.line_number = tokens[*token_pos]->line_number;
+            ast_subscript->subscript_node.base = base;
+            if (ast_subscript->subscript_node.base->node_type != NODE_IDENTIFIER)
+            {
+                fprintf(stderr, "Src: %s. Subscription in L=%i\n. Base array is required to be a valid identifier.\n", 
+                        tracker.current_src_file, ast_subscript->subscript_node.line_number);
+                exit(1);
+            }
+            ast_subscript->subscript_node.base_identifier = base->identifier_node.name;
+            ast_subscript->subscript_node.index = parseExpression(tokens, token_pos);
+            demand_token(tokens, token_pos, TOKEN_SYMBOL, "]");
+
+            base = ast_subscript;
+        }
+        
+        // Else is field access 
+        else 
+        {
+            (*token_pos)++;
+            ASTNode *ast_field_access = malloc(sizeof(ASTNode));
+            ast_field_access->node_type = NODE_FIELD_ACCESS;
+            ast_field_access->field_access_node.base = base; 
+            ast_field_access->field_access_node.field_name = tokens[*token_pos]->tk_value;
+            (*token_pos)++;
+
+            base = ast_field_access;
+        }
+    }
+
+    return base;
+}
+
+
+
 
 
 ASTNode *tryFoldBinary(ASTNode *left, ASTNode *right, char *op)
@@ -1414,30 +1467,10 @@ int64_t foldUnaryOperation(int64_t right, char *unary_op)
 //Parse single units
 ASTNode *parseUnit(Token **tokens, int *token_pos)
 {
-    //Unary operations
-    if (tokens[*token_pos]->tk_type == TOKEN_OPERATOR)
-    {
-        //Create a Unary Node
-        ASTNode *ast_unary = malloc(sizeof(ASTNode ));
-        ast_unary->node_type = NODE_UNARY_OP;
-        ast_unary->unary_op_node.op = tokens[*token_pos]->tk_value;
-        (*token_pos)++;
-        ast_unary->unary_op_node.right = parseUnit(tokens, token_pos);
-        
-        ASTNode *ast_number = tryFoldUnary(ast_unary->unary_op_node.right, ast_unary->unary_op_node.op);
-        if (ast_number != NULL)
-        {
-            free(ast_unary);
-            return ast_number;
-        }
-        
-
-        return ast_unary;
-    }
-    
+   
 
     //Function calls:  identifier + "("
-    else if (tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER &&
+    if (tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER &&
             strcmp(tokens[*token_pos + 1]->tk_value, "(") == 0)
     {
         //Create a Function Call Node
@@ -1515,42 +1548,7 @@ ASTNode *parseUnit(Token **tokens, int *token_pos)
 
         return ast_bool;
     }
-
-    //Object field (identifier + "." + identifier)
-    else if (tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER && strcmp(tokens[*token_pos + 1]->tk_value, ".") == 0
-                && tokens[*token_pos + 2]->tk_type == TOKEN_IDENTIFIER)
-    {
-        //Create instance node
-        ASTNode *ast_instance = malloc(sizeof(ASTNode ));
-        ast_instance->node_type = NODE_INSTANCE;
-        ast_instance->instance_node.instance_identifier = tokens[*token_pos]->tk_value;
-        //Advance past identifier
-        (*token_pos)++;
-        //Advance past "."
-        (*token_pos)++;
-        ast_instance->instance_node.field_identifier = tokens[*token_pos]->tk_value;
-        //Advance past field identifier
-        (*token_pos)++;
-        return ast_instance;
-    }
-
-    //Deref field node
-    else if (strcmp(tokens[*token_pos]->tk_value, "(") == 0 && strcmp(tokens[*token_pos + 1]->tk_value, "*") == 0)
-    {
-        (*token_pos) += 2;
-
-        ASTNode *pointer_expr = parseExpression(tokens, token_pos);
-        demand_token(tokens, token_pos, TOKEN_SYMBOL, ")");
-        demand_token(tokens, token_pos,TOKEN_SYMBOL, ".");
-
-        ASTNode *ast_deref_field = malloc(sizeof(ASTNode ));
-        ast_deref_field->node_type = NODE_DEREF_FIELD;
-        ast_deref_field->deref_field_node.pointer_expr = pointer_expr;
-        ast_deref_field->deref_field_node.field_name = tokens[*token_pos]->tk_value;
-        (*token_pos)++;
-        return ast_deref_field;
-    }
-
+    
     //Variables
     else if (tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER)
     {
@@ -1562,7 +1560,8 @@ ASTNode *parseUnit(Token **tokens, int *token_pos)
         (*token_pos)++;
         return ast_id;
     }
-
+    
+    //sizeof
     else if (strcmp(tokens[*token_pos]->tk_value,"sizeof") == 0)
     {
         //Advance past "sizeof"
@@ -1641,8 +1640,6 @@ ASTNode *parseUnit(Token **tokens, int *token_pos)
     }
 
 
-
-
     // Parenthesis
     else if (tokens[*token_pos]->tk_type == TOKEN_SYMBOL &&
             strcmp(tokens[*token_pos]->tk_value, "(") == 0 )
@@ -1655,7 +1652,8 @@ ASTNode *parseUnit(Token **tokens, int *token_pos)
         demand_token(tokens, token_pos,TOKEN_SYMBOL, ")");
         return expr;
     }
-
+    
+    // Not supported
     else
     {
         fprintf(stderr, "Unit type is not supported: %s (%s) \n",
@@ -1666,6 +1664,47 @@ ASTNode *parseUnit(Token **tokens, int *token_pos)
 
 
 
+/*
+void print_lvalue(LValue *lvalue, int indent)
+{
+
+    if (lvalue == NULL) { return; }
+    for (int i = 0; i < indent; i++) printf("  ");
+    
+
+    switch (lvalue->lvalue_type)
+    {
+        case LVALUE_DEREF:
+        {
+            printf("DEREF\n");
+            print_lvalue(lvalue->lvalueDeref.subLValue, indent + 1);
+            break;
+        }
+
+        case LVALUE_IDENTIFIER:
+        {
+            printf("IDENTIFIER. Id: %s \n", lvalue->lvalueIdentifier.identifier);
+            print_lvalue(lvalue->lvalueIdentifier.subLValue, indent + 1);
+            break;
+        }
+
+        case LVALUE_ARRAY_SUBSCRIPT:
+        {
+            printf("ARRAY_SUBSCRIPT\n");
+            print_ast(lvalue->lvalueArraySubscript.subscript_expr, indent + 1);
+            print_lvalue(lvalue->lvalueArraySubscript.subLValue, indent + 1);
+            break;
+        }
+
+        case LVALUE_FIELD_ACCESS:
+        {
+            printf("FIELD_ACCESS: Id: %s \n", lvalue->lvalueFieldAccess.field_identifier);
+            print_lvalue(lvalue->lvalueFieldAccess.subLValue, indent + 1);
+            break;
+        }
+    }
+}
+*/
 void print_ast(ASTNode *program, int indent)
 {
     for (int i = 0; i < indent; i++) printf("  ");
@@ -1678,11 +1717,54 @@ void print_ast(ASTNode *program, int indent)
             print_ast(program->assignment_node.expression, indent + 1);
             break;
         }
-
+        
+             
         case NODE_REASSIGNMENT:
         {
-            printf("Reassignment: %s\n", program->reassignment_node.identifier);
+            printf("Reassignment with '%s' \n", tokenTypeToStr(program->reassignment_node.op));
+
+            for (int i = 0; i < indent; i++) printf("  ");
+            printf("LValue: \n");
+            print_ast(program->reassignment_node.lvalue, indent + 1);
+
+            for (int i = 0; i < indent; i++) printf("  ");
+            printf("RValue: \n");
             print_ast(program->reassignment_node.expression, indent + 1);
+            break;
+        }
+        
+        case NODE_SUBSCRIPT:
+        {
+            printf("Subscript: \n");
+            for (int i = 0; i < indent; i++) printf("  ");
+            printf("Base: Identifier: %s \n", program->subscript_node.base_identifier);
+            print_ast(program->subscript_node.base, indent + 1);
+
+            for (int i = 0; i < indent; i++) printf("  ");
+            printf("Index: \n");
+            print_ast(program->subscript_node.index, indent + 1);
+            break;
+        }
+        
+        case NODE_ARRAY_INIT:
+        {
+            printf("Array Init. Identifier: %s\n", program->array_init_node.arr_name);
+            for (int k = 0; k < program->array_init_node.size; k++)
+            {
+                for (int i = 0; i < indent; i++) printf("  ");
+                printf("Element %i: \n", k);
+                print_ast(program->array_init_node.elements[k], indent + 1);
+            }
+            break;
+        }
+
+        case NODE_FIELD_ACCESS:
+        {
+            printf("Field access: \n");
+            print_ast(program->field_access_node.base, indent + 1);
+
+            for (int i = 0; i < indent; i++) printf("  ");
+            printf("Field name: %s\n", program->field_access_node.field_name);
             break;
         }
         
@@ -1696,35 +1778,6 @@ void print_ast(ASTNode *program, int indent)
                 }
                 printf(")\n");
                 break;
-            }
-        case NODE_PTR_REASSIGNMENT:
-        {
-            printf("Ptr reassignment. Deref level: %i. Lvalue: \n", program->ptr_reassignment_node.deref_level);
-            print_ast(program->ptr_reassignment_node.lvalue, indent + 1);
-            print_ast(program->ptr_reassignment_node.expression, indent + 1);
-            break;
-        }
-
-        case NODE_PTR_FIELDREASSIGNMENT:
-        {
-            printf("Ptr Field Reassignment. Ptr identifier: %s, Field: %s  \n", program->ptr_fieldreassign_node.ptr_identifier,
-                   program->ptr_fieldreassign_node.field_identifier);
-            print_ast(program->ptr_fieldreassign_node.expression, indent + 1);
-            break;
-        }
-
-        case NODE_DEREF_FIELD:
-        {
-            printf("Ptr Deref Field. Field: %s \n", program->deref_field_node.field_name);
-            print_ast(program->deref_field_node.pointer_expr, indent + 1);
-            break;
-        }
-
-        case NODE_INSTANCE_REASSIGNMENT:
-        {
-            printf("Instance Reassignment: %s.%s\n", program->field_reassign_node.instance_identifier, program->field_reassign_node.field_identifier);
-            print_ast(program->field_reassign_node.expression, indent + 1);
-            break;
         }
 
         case NODE_DECLARATION:
@@ -1766,13 +1819,6 @@ void print_ast(ASTNode *program, int indent)
             printf("Binary Op: %s \n", program->binary_op_node.op);
             print_ast(program->binary_op_node.left, indent + 1);
             print_ast(program->binary_op_node.right, indent + 1);
-            break;
-        }
-
-        case NODE_SYSCALL:
-        {
-            printf("Syscall. OPCODE: %s, Operand: \n", program->syscall_node.syscall_identifier);
-            print_ast(program->syscall_node.operand, indent + 1);
             break;
         }
 
@@ -1824,6 +1870,7 @@ void print_ast(ASTNode *program, int indent)
         {
             printf("If: \n");
             print_ast(program->if_node.condition_expr, indent + 1);
+            print_ast(program->if_node.body, indent + 1);
             if (program->if_node.else_body != NULL)
             {
                 for (int i = 0; i < indent; i++) printf("  ");
@@ -2003,11 +2050,6 @@ void print_ast(ASTNode *program, int indent)
             break;
         }
 
-        case NODE_INSTANCE:
-        {
-            printf("Instance name: %s, field name: %s \n", program->instance_node.instance_identifier, program->instance_node.field_identifier);
-            break;
-        }
 
         case NODE_BLOCK:
         {
@@ -2060,26 +2102,6 @@ void free_ast(ASTNode *node) {
             break;
         }
 
-        case NODE_PTR_REASSIGNMENT: {
-            free_ast(node->ptr_reassignment_node.lvalue);
-            free_ast(node->ptr_reassignment_node.expression);
-            break;
-        }
-
-        case NODE_PTR_FIELDREASSIGNMENT: {
-            free_ast(node->ptr_fieldreassign_node.expression);
-            break;
-        }
-
-        case NODE_DEREF_FIELD: {
-            free_ast(node->deref_field_node.pointer_expr);
-            break;
-        }
-
-        case NODE_INSTANCE_REASSIGNMENT: {
-            free_ast(node->field_reassign_node.expression);
-            break;
-        }
         case NODE_DECLARATION: {
             // No additional memory to free here
             break;
@@ -2093,11 +2115,6 @@ void free_ast(ASTNode *node) {
         case NODE_BINARY_OP: {
             free_ast(node->binary_op_node.left);
             free_ast(node->binary_op_node.right);
-            break;
-        }
-
-        case NODE_SYSCALL: {
-            free_ast(node->syscall_node.operand);
             break;
         }
 
@@ -2194,12 +2211,6 @@ void free_ast(ASTNode *node) {
             break;
         }
 
-        case NODE_INSTANCE:
-        {
-            // No additional memory to free here
-            break;
-        }
-
         default:
         {
             //fprintf(stderr, "Unknown node type in free_ast()\n");
@@ -2212,6 +2223,37 @@ void free_ast(ASTNode *node) {
 }
 
 
+int is_statement(ASTNode *node)
+{
+    switch(node->node_type)
+    {
+        case NODE_ASSIGNMENT:
+        case NODE_RETURN:
+        case NODE_DECLARATION:
+        case NODE_WHILE:
+        case NODE_FOR:
+        case NODE_FOREACH:
+        case NODE_IF:
+        case NODE_STDALONE_FUNC_CALL:
+        case NODE_REASSIGNMENT: return 1;
+        
+        default: return 0;
+    }
+}
+
+int is_pushing_scope(ASTNode *node)
+{
+    switch (node->node_type) 
+    {
+        case NODE_FUNC_DEF:
+        case NODE_IF:
+        case NODE_FOR:
+        case NODE_FOREACH:
+        case NODE_WHILE: return 1;
+
+        default: return 0;
+    }
+}
 
 char *astTypeToStr(ASTNode *node)
 {
@@ -2221,14 +2263,11 @@ char *astTypeToStr(ASTNode *node)
         case NODE_RETURN: return "RETURN";
         case NODE_NUMBER: return "NUMBER";
         case NODE_BLOCK: return "BLOCK";
+        case NODE_SUBSCRIPT: return "SUBSCRIPT";
         case NODE_ASSIGNMENT: return "ASSIGNMENT";
         case NODE_REASSIGNMENT: return "REASSIGNMENT";
         case NODE_CB_ASSIGNMENT: return "CB_ASSIGNMENT";
-        case NODE_INSTANCE_REASSIGNMENT: return "INSTANCE_REASSIGNMENT";
-        case NODE_PTR_FIELDREASSIGNMENT: return "PTR_FIELD_REASSIGNMENT";
         case NODE_EXTERN_FUNC_DEF: return "EXTERN_FUNC_DEF";
-        case NODE_DEREF_FIELD: return "DEREF_FIELD";
-        case NODE_PTR_REASSIGNMENT: return "PTR_REASSIGNMENT";
         case NODE_DECLARATION: return "DECLARATION";
         case NODE_NULL: return "NULL";
         case NODE_ENUM: return "ENUM";
@@ -2247,7 +2286,6 @@ char *astTypeToStr(ASTNode *node)
         case NODE_CHAR: return "CHAR";
         case NODE_FOR: return "FOR";
         case NODE_IF: return "IF";
-        case NODE_INSTANCE: return "INSTANCE";
         case NODE_OBJECT: return "OBJECT";
         case NODE_STR: return "STRING";
         case NODE_WHILE: return "WHILE";

@@ -2,7 +2,14 @@
 ///// TODO:
 8. increment and decrement (++ and --) and reassignments like x += y
 
-9. lvalue 
+10. use correct register for index in subscript node
+
+12. System for entering-exiting nodes in a way that we push the correct context, working context, and free registers
+
+13. Weird stuff when calling functions. Return values are placed in RAX but within BinaryOPNode, they overwrite each other 
+
+14. Register clubbering. Register values get overwritten within recursive function calls.
+
 
 ///// DONE 
 1. use the register that best fits the size of the variable. Risk of truncation issues otherwise
@@ -28,6 +35,11 @@
    -> Extern function ast node 
 
 
+9. lvalue (pain) 
+
+
+11. change stack pointer management to standard approach 
+   -> stack pointer begins at the lowest address 
 
 /////CONSIDERATIONS
 1. Objects definitions inside functions ===> Global objects

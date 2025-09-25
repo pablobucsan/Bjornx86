@@ -55,7 +55,8 @@ void genStart(FILE *file, ASTNode *program)
     fprintf(file, "_start:\n");
     fprintf(file, "    call _main\n");
     genExit(file);
-
+    
+    initWorkingContext();
     initMatcher();
     init_GPR();
     init_FPR();
@@ -91,7 +92,7 @@ void compile(CompilerOptions *CO)
 
     // TOKENIZE THE SOURCE CODE 
     char *src = read_file(CO->CA->scriptPath);
-    Token **tokens = tokenize(src);
+    Token **tokens = tokenize(src, CO->CA->scriptPath);
     int token_pos = 0; 
     
     if (CO->CF->print_tokens) { print_tokens(tokens); }
@@ -101,16 +102,19 @@ void compile(CompilerOptions *CO)
     ASTNode *program = parseProgram(tokens, &token_pos);
     
     if (CO->CF->print_ast) { print_ast(program,0); }
-        
+    
+
+    
     // ANALYZE AND POPULATE SYMBOL, FUNCTION, OBJECT, ENUM TABLES
     init_gb_symbol_table(1);
     init_gb_function_table(1);
     init_gb_object_table(1);
     init_gb_enum_table(1); 
     
+
     analyze(program, gb_symbolTable, gb_functionTable, SCRIPT_USER); 
         
-
+    printf("Done analyzing\n");    
     // BUILD AND GENERATE x86_64 INSTRUCTIONS
     char *file = CO->CA->outputPath;
     char *buffer = ".asm\0";
@@ -120,10 +124,12 @@ void compile(CompilerOptions *CO)
 
     // FIRST PASS FOR DATA     
     genData(asm_file, program);
+        
 
     // SECOND PASS FOR _START
     genStart(asm_file, program);
-
+    
+    
     printf("Built successfully.\n");
 }
 

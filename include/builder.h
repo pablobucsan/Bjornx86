@@ -7,10 +7,31 @@
 
 
 #define MAX_PI_COUNT 10
+#define MAX_EXPECTATIONS 10
+#define MAX_WORKING_CONTEXT 10
 
 typedef struct Register Register;
 
 
+
+typedef struct CurrentFrameAndFunction 
+{
+    int stack_base_ptr;
+    Function *f;
+}CurrentFrameAndFunction;
+
+typedef enum WCType 
+{
+    COMPUTING_NOTHING,
+    COMPUTING_LVALUE,
+    COMPUTING_RVALUE,
+}WCType;
+
+typedef struct WorkingContext 
+{
+    WCType typeStack[MAX_WORKING_CONTEXT];
+    int currentContextPtr;
+}WorkingContext;
 
 typedef struct Register 
 {
@@ -72,8 +93,8 @@ typedef struct Expectation
 
 typedef struct Matcher 
 {
-    Expectation *expecation_to_match;
-    int empty;
+    Expectation **expecations_to_match;
+    int current_expectation_index;
 }Matcher;
 
 
@@ -150,13 +171,30 @@ extern RegisterTable* fpr;
 extern Matcher *matcher;
 
 
+// Working Context 
+extern WorkingContext workingContext;
+
+void initWorkingContext();
+WCType getCurrentWorkingContext();
+
+Operand with_lvalue_context(FILE *asm_file, ASTNode *node, SymbolTable *st, FunctionTable *ft);
+Operand with_rvalue_context(FILE *asm_file, ASTNode *node, RegisterType rtype, int size, SymbolTable *st, FunctionTable *ft);
 
 
 
+void pushWorkingContext(WCType type);
+void popWorkingContext();
+void popAllWorkingContexts();
+
+ContextType astToContext(ASTNode *node);
+
+int align_rsp(int locals_weight);
 void initMatcher();
 Register *matchExpectedRegister();
-void expectateRegister(RegisterType registerType, int size);
+void expectRegister(RegisterType registerType, int size);
 
+void clearExpectation();
+void clearAllExpectations();
 
 void init_GPR();
 void init_FPR();
@@ -164,6 +202,7 @@ Register *populateFPR(int index, char *name);
 Register *getGPR(int size);
 Register *getFPR(int size);
 
+void clearRegisters(RegisterTable *table);
 
 Operand buildData(FILE *asm_file, ASTNode *program, SymbolTable *current_st);
 Operand buildStart(FILE *asm_file, ASTNode *program, SymbolTable *current_st, FunctionTable *current_ft);

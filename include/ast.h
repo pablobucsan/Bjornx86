@@ -10,6 +10,9 @@
 #include <stdint.h>
 
 typedef struct ASTNode ASTNode;
+typedef struct LValue LValue;
+
+
 
 
 typedef struct UsedFiles
@@ -53,12 +56,6 @@ typedef struct BoolNode
     char *bool_value;          //true or false
 }BoolNode;
 
-typedef struct ObjectInstanceNode
-{
-    char *instance_identifier;
-    char *field_identifier;
-}ObjectInstanceNode;
-
 typedef struct UnaryOPNode
 {
     char *op;                   // operator ('-', '*', '&;)
@@ -74,7 +71,7 @@ typedef struct CastNode
 
 typedef struct SizeOfNode
 {
-    char *type;
+char *type;
     ASTNode *expr;
 }SizeOfNode;
 
@@ -90,54 +87,51 @@ typedef struct IdentifierNode
     char *name;
 } IdentifierNode;
 
+typedef struct SubscriptNode 
+{
+    int line_number;
+    char *base_identifier;
+    ASTNode *base;
+    ASTNode *index;
+    int index_size;
+}SubscriptNode;
+
+typedef struct FieldAccessNode 
+{
+    ASTNode *base;
+    char *field_name;
+}FieldAccessNode;
+
+
+typedef struct ArrayInitNode 
+{
+    char *type;
+    char *arr_name;
+    int size;
+    int capacity;
+    ASTNode **elements;
+}ArrayInitNode;
+
 typedef struct AssignmentNode
 {
+    int line_number;
     char *type;                 // type of the variable    (i32)
-    char *identifier;
+    char *identifier;           // identifier 
     ASTNode *expression;        // expression to evaluate  (2 + 3 * f(1,2) * (-1 + 3) )
 } AssignmentNode;
 
 typedef struct ReassignmentNode
 {
-    char *identifier;
-    TokenType op;
+    int line_number;
+    ASTNode *lvalue; // Lvalue
+    TokenType op;               // Operation => '=', '+=', '-=', '/=', '*='
     ASTNode *expression;
+    int size;
 }ReassignmentNode;
-
-typedef struct PointerReassignmentNode
-{
-    int deref_level;
-    char* deref_type;
-    ASTNode *lvalue;
-    ASTNode *expression;
-    TokenType op;
-}   PointerReassignmentNode;
-
-typedef struct FieldReassignmentNode
-{
-    char *instance_identifier;
-    char *field_identifier;
-    ASTNode *expression;
-    TokenType op;
-}FieldReassignmentNode;
-
-typedef struct PtrFieldReassignNode
-{
-    char *ptr_identifier;
-    char *field_identifier;
-    ASTNode *expression;
-    TokenType op;
-}PtrFieldReassignNode;
-
-typedef struct DerefFieldNode
-{
-    ASTNode *pointer_expr;  // Expression that evaluates to a pointer (e.g., ptr_A)
-    char *pointed_at_type;
-    char *field_name;       // Field name (e.g., "x")
-}DerefFieldNode;
 
 typedef struct DeclarationNode
 {
+    int line_number;
     char *type;
     char *identifier;
 }DeclarationNode;
@@ -176,6 +170,8 @@ typedef struct WhileNode
 
 typedef struct IfNode
 {
+
+    int condition_size;
     ASTNode *condition_expr;
     ASTNode *body;
     ASTNode *else_body;
@@ -273,9 +269,6 @@ typedef struct ASTNode
     {
         NODE_ASSIGNMENT,
         NODE_REASSIGNMENT,
-        NODE_PTR_REASSIGNMENT,
-        NODE_PTR_FIELDREASSIGNMENT,
-        NODE_DEREF_FIELD,
         NODE_DECLARATION,
         NODE_UNARY_OP,
         NODE_CAST,
@@ -287,9 +280,7 @@ typedef struct ASTNode
         NODE_BOOL,
         NODE_SKIP,
         NODE_STOP,
-        NODE_INSTANCE,
         NODE_STDALONE_FUNC_CALL,
-        NODE_INSTANCE_REASSIGNMENT,
         NODE_FUNC_CALL,
         NODE_SYSCALL,
         NODE_RETURN,
@@ -300,21 +291,21 @@ typedef struct ASTNode
         NODE_WHILE,
         NODE_IF,
         NODE_FOR,
+        NODE_ARRAY_INIT,
         NODE_FOREACH,
+        NODE_SUBSCRIPT,
+        NODE_FIELD_ACCESS,
         NODE_FUNC_DEF,
         NODE_EXTERN_FUNC_DEF,
         NODE_USE_DIRECTIVE,
         NODE_IDENTIFIER,
-        NODE_BLOCK
+        NODE_BLOCK,
     } node_type;
 
     union
     {
         AssignmentNode assignment_node;
         ReassignmentNode reassignment_node;
-        PointerReassignmentNode ptr_reassignment_node;
-        PtrFieldReassignNode ptr_fieldreassign_node;
-        DerefFieldNode deref_field_node;
         DeclarationNode declaration_node;
         ForNode for_node;
         ForeachNode foreach_node;
@@ -327,7 +318,7 @@ typedef struct ASTNode
         FuncDefNode funcdef_node;
         ExternFuncDefNode extern_func_def_node;
         FuncCall funccall_node;
-        SysCall syscall_node;
+        ArrayInitNode array_init_node;
         ReturnNode return_node;
         UseDirectiveNode use_node;
         UnaryOPNode unary_op_node;
@@ -336,13 +327,13 @@ typedef struct ASTNode
         BinaryOPNode binary_op_node;
         ObjectNode object_node;
         EnumNode enum_node;
+        FieldAccessNode field_access_node;
+        SubscriptNode subscript_node;
         IdentifierNode identifier_node;
         NumberNode number_node;
         CharNode char_node;
         StrNode str_node;
         BoolNode bool_node;
-        FieldReassignmentNode field_reassign_node;
-        ObjectInstanceNode instance_node;
         BlockNode block_node;
         NullNode null_node;
     };
@@ -361,6 +352,9 @@ ASTNode *parseUseDirective(Token **tokens,int *token_pos);
 Param *parseFunctionParameter(Token **tokens, int *token_pos);
 
 
+ASTNode *parseLValue(Token **tokens, int *token_pos);
+
+char *resolveType(Token **tokens, int *token_pos);
 char *resolvePtrType(Token **tokens, int *token_pos);
 ASTNode *parsePtrAssignment(Token **tokens, int *token_pos);
 ASTNode *parseAssignment(Token **tokens, int *token_pos);
@@ -368,12 +362,21 @@ ASTNode *parseAssignment(Token **tokens, int *token_pos);
 ASTNode *parseDeclaration(Token **tokens, int *token_pos);
 
 ASTNode *parseExpression(Token **tokens, int *token_pos);
+
+
+ASTNode *parseArrayInit(Token **tokens, int *token_pos, char *arr_name);
+ASTNode *parseExpr_Precedence7(Token **tokens, int *token_pos);
+ASTNode *parseExpr_Precedence6(Token **tokens, int *token_pos);
 ASTNode *parseExpr_Precedence5(Token **tokens, int *token_pos);
 ASTNode *parseExpr_Precedence4(Token **tokens, int *token_pos);
 ASTNode *parseExpr_Precedence3(Token **tokens, int *token_pos);
 ASTNode *parseExpr_Precedence2(Token **tokens, int *token_pos);
 ASTNode *parseExpr_Precedence1(Token **tokens, int *token_pos);
 ASTNode *parseUnit(Token **tokens, int *token_pos);
+
+
+ASTNode *parseLValue_Precedence2(Token **tokens, int *token_pos);
+
 
 int64_t foldBinOperation(int64_t left, int64_t right, char *binary_op);
 int64_t foldUnaryOperation(int64_t right, char *unary_op);
@@ -383,6 +386,10 @@ ASTNode *tryFoldUnary(ASTNode *right, char *op);
 void print_ast(ASTNode *program, int indent);
 void free_ast(ASTNode *node);
 
-char *astTypeToStr(ASTNode *node);
 
+
+int is_type_array(char *type);
+char *astTypeToStr(ASTNode *node);
+int is_statement(ASTNode *node);
+int is_pushing_scope(ASTNode *node);
 #endif //ABC_AST_H

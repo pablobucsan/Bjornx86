@@ -65,7 +65,7 @@ int is_type_enum(EnumTable *et, char *type);
 
 char **get_paramTypes_from_Params(Param **params, int param_count);
 int size_of_type(char *type);
-void compare_types(char *identifier, char *declared, char *actual);
+void compare_types(Symbol *s, char *declared, char *actual);
 char *get_base_type(char *type);
 char * ctxToString(ContextType ctx_type);
 

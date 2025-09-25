@@ -14,15 +14,15 @@
 char *types[12] = {"int32", "int16","int8", "uint8", "uint16" , "uint32" ,"char", "str", "bool", "void" ,"ptr", "any"};
 char *keywords[] = {"while", "for","foreach","in","within","func", "true", "false", "object", "enum" , "return", "if", "else", "use","inherits", "sizeof","callback", "stop", "skip", "extern" };
 
-char *syscalls[] = {"SYSCALL_PRINT", "SYSCALL_BMALLOC", "SYSCALL_CATCH_1", "SYSCALL_CATCH_2" , "SYSCALL_CATCH_4", "SYSCALL_BFREE", "SYSCALL_THROW",
-                    "SYSCALL_CREATE_THREAD", "SYSCALL_READ"};
-
-
 char char_operators[] = {'+', '-', '%', '*', '/', '<', '>', '&', '!'};
-char char_symbols[] = {'(', ')', '{', '}', ';', ',', '.', '#'};
+char char_symbols[] = {'(', ')', '{', '}', ';', ',', '.', '#','[',']'};
 char *str_operators[] = {"<=", ">=", "==", "&&", "||", "!="};
 char *reassign_symbols[5] = {"-=","+=","*=","/=","%="};
 
+
+
+
+Tracker tracker = {.current_src_file = NULL, .current_line = 0};
 
 void skip_comment(char **src)
 {
@@ -92,19 +92,6 @@ int is_keyword(char *buffer)
     return 0;
 }
 
-int is_syscall(char *buffer)
-{
-    for (int i = 0; i < sizeof(syscalls)/ sizeof(syscalls[0]); i++)
-    {
-        
-        if (strcmp(syscalls[i], buffer) == 0)
-        {
-              return 1;
-        }
-    }
-    return 0;
-}
-
 int is_symbol(char c)
 {
     for (int i = 0; i < sizeof(char_symbols)/ sizeof(char_symbols[0]); i++)
@@ -148,6 +135,7 @@ Token *create_token(TokenType type, const char *value)
     Token *new_tk = malloc(sizeof(Token));
     new_tk->tk_type = type;
     new_tk->tk_value = strdup(value);
+    new_tk->line_number = tracker.current_line;
     return new_tk;
 }
 
@@ -318,14 +306,15 @@ Token *read_identifier(char **src)
 
     if (is_keyword(buffer)) return create_token(TOKEN_KEYWORD, buffer);
 
-    if (is_syscall(buffer)) return create_token(TOKEN_SYSCALL, buffer);
-
     return create_token(TOKEN_IDENTIFIER, buffer);
 
 }
 
-Token **tokenize(char *src)
+Token **tokenize(char *src, char *filePath)
 {
+    tracker.current_src_file = filePath;
+    tracker.current_line = 1;
+
     size_t capacity = INITIAL_TOKENS_SIZE;
     size_t size = 0;
 
@@ -340,7 +329,8 @@ Token **tokenize(char *src)
             if (!tokens) { fprintf(stderr, "Realloc for tokens failed! \n"); exit(1); }
         }
 
-
+        
+        if (*src == '\n') { tracker.current_line++; }
         if (isspace(*src)){ src++; }
         else if (*src == '/' && *(src + 1) == '/') { skip_comment(&src); }
         else if (isdigit(*src)) { tokens[size++] = read_number(&src); }

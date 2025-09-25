@@ -1,0 +1,47 @@
+# Clone a repository
+git clone <repo-url>
+
+# Check current branch
+git branch
+
+# List all branches
+git branch -a
+
+# Create a new branch
+git checkout -b <branch-name>
+
+# Switch branches
+git checkout <branch-name>
+
+# Stage changes
+git add <file>         # Add specific file
+git add .              # Add all changes
+
+# Commit changes
+git commit -m "Your message"
+
+# Push changes to remote
+git push origin <branch-name>
+
+# Pull latest changes from remote
+git pull
+
+# View commit history
+git log
+
+# Show status of working directory
+git status
+
+# Merge another branch into current
+git merge <branch-name>
+
+# Delete a branch
+git branch -d <branch-name>
+git push origin --delete <branch-name>   # Delete remote branch
+
+# Stash changes
+git stash
+git stash pop
+
+# Show differences
+git diff

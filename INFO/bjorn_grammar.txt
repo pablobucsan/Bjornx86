@@ -4,20 +4,18 @@
 program := <statement>
 
 
-statement           := assignment | reassignment | ptrReassignment | fieldReassignment |declaration | emptyStmt | whileLoop | forLoop | funcDef
-                                  | objectDef    | ifStatement       | ptrFieldReassignment   | system_call
+statement           := assignment | reassignment | declaration | emptyStmt | whileLoop | forLoop | funcDef
+                                  | objectDef    | ifStatement         |  | system_call
                                   | useDirective | callbackAssignment  | stdAloneFuncCall
                                   | foreachLoop  | enumDef 
 
 emptyStmt               := ";"
 useDirective            := "#" "use" "\"" filePath "\""
-declaration             := ( ( "object"? identifier ) | builtinType | ptr "<" ("object"? identifier ) | builtinType | ("ptr" "<" type ">" ) ">" ) identifier ";"
-assignment              := lvalue "=" expression ";"
-lvalue                  := "*" expression | ( ( "object"? identifier ) | builtinType | ptr "<" ("object"? identifier) | builtinType ">" ) identifier
-reassignment            := ( ("*"  identifier) | identifier ) "assign_sym" expression ";"
-ptrReassignment         := <"*"> identifier "assign_sym" expression ";"
-fieldReassignment       := identifier "." identifier "assign_sym" expression ";"
-ptrFieldReassignment    := "(" "*" identifier ")" "." identifier "assign_sym" expression ";"
+
+lvalue                  := identifier | lvalue '[' expression ']' | '*' lvalue | lvalue.identifier ';'
+declaration             := type identifier ';'
+assignment              := type identifier "=" expression ";"
+reassignment            := lvalue "assign_sym" expression ";"
 expression              := < terms operator term > | < expression >
 term                    := < unit operator unit  >
 unit                    := identifier | identifier "." identifier | number | char | str | funcCall | "(" expression ")" 
@@ -41,7 +39,7 @@ enumDef                 := "enum" identifier "{" <declaration> "}"
 
 identifier          := <[a..zA..Z]>  + "_"
 number              := identifier | <[0...9]>
-builtinType         := "void" | "int32" | "int16" | "int8" | "str" | "char" | "bool" | "void" | "ptr < "<" type ">" > "
+builtinType         := "void" | "int32" | "int16" | "int8" | "str" | "char" | "bool" | "void" | "ptr < "<" type ">" > " | type "[" number "]" 
 symbol              := "(" | ")" | "{" | "}" | ";" | "." 
 assign_sym          := "=" | "+=" | "-="
 operator            := "+" | "-" | "*" | "/" | ">" | "<" | "&" | "==" | "<=" | ">=" | "!" | "&&" | "||"

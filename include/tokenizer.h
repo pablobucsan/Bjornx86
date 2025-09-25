@@ -28,14 +28,26 @@ typedef enum TokenType
     TOKEN_EOF
 } TokenType;
 
+
+
+typedef struct Tracker 
+{
+    int current_line;
+    char *current_src_file;
+}Tracker;
+
+extern Tracker tracker;
+
+
 typedef struct Token
 {
     TokenType tk_type;
     char *tk_value;
+    int line_number;
 } Token;
 
 
-Token **tokenize(char *src);
+Token **tokenize(char *src, char *filePath);
 void print_tokens(Token **tokens);
 char *tokenTypeToStr(TokenType type);
 

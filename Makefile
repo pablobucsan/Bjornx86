@@ -79,3 +79,14 @@ clean_libs:
 
 clean_output:
 	rm -rf $(OUTPUT_DIR)
+
+
+
+
+
+
+
+
+
+#compiling  make SCRIPT=test.bjo OUTPUT_SCRIPT=test
+#running ./output/test

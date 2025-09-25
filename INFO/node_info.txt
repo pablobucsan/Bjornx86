@@ -1,0 +1,6 @@
+
+
+// In builder.c
+1. ------------------ RULES ABOUT BUILDING NODES -----------------
+  1.1 ----> Prelude every node with 'enter_node(program)' and finish with 'exit_node(program)'
+
