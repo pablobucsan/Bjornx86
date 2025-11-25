@@ -62,9 +62,29 @@ typedef struct ObjectInstanceNode
 typedef struct UnaryOPNode
 {
     char *op;                   // operator ('-', '*', '&;)
-    int size_of_operand;        // *identifier --> gotta know size of identifier
+    int size_of_operand;        
     ASTNode *right;
 } UnaryOPNode;
+
+
+// Post fix operations bind right-to-left
+typedef struct PostfixOPNode
+{
+    char *op;                   // operator ("++","--")
+    int size_of_operand;       
+    char *type;
+    ASTNode *left;
+}PostfixOPNode;
+
+
+
+typedef struct StdAlone_PostfixOPNode
+{
+    char *op;                   // operator ("++","--")
+    int size_of_operand;       
+    char *type;
+    ASTNode *left;
+}StdAlone_PostfixOPNode;
 
 typedef struct CastNode
 {
@@ -90,6 +110,42 @@ typedef struct IdentifierNode
     char *name;
 } IdentifierNode;
 
+<<<<<<< Updated upstream
+=======
+typedef struct SubscriptNode 
+{
+    int line_number;
+    char *base_identifier;
+    ASTNode *base;
+    ASTNode *index;
+    int element_size;
+}SubscriptNode;
+
+typedef struct FieldAccessNode 
+{
+    ASTNode *base;
+    char *type;
+    char *field_name;
+}FieldAccessNode;
+
+typedef struct PtrFieldAccessNode 
+{
+    ASTNode *base;
+    char *type;
+    char *field_name;
+}PtrFieldAccessNode;
+
+
+typedef struct ArrayInitNode 
+{
+    char *type;
+    char *arr_name;
+    int size;
+    int capacity;
+    ASTNode **elements;
+}ArrayInitNode;
+
+>>>>>>> Stashed changes
 typedef struct AssignmentNode
 {
     char *type;                 // type of the variable    (i32)
@@ -102,6 +158,11 @@ typedef struct ReassignmentNode
     char *identifier;
     TokenType op;
     ASTNode *expression;
+<<<<<<< Updated upstream
+=======
+    int size;
+    char *type;
+>>>>>>> Stashed changes
 }ReassignmentNode;
 
 typedef struct PointerReassignmentNode
@@ -189,6 +250,9 @@ typedef struct ForNode
     ASTNode *reassignment_expr;
     ASTNode *body;
 }ForNode;
+
+
+
 
 typedef struct ForeachNode
 {
@@ -278,6 +342,8 @@ typedef struct ASTNode
         NODE_DEREF_FIELD,
         NODE_DECLARATION,
         NODE_UNARY_OP,
+        NODE_POSTFIX_OP,
+        NODE_STDALONE_POSTFIX_OP,
         NODE_CAST,
         NODE_SIZEOF,
         NODE_BINARY_OP,
@@ -301,6 +367,12 @@ typedef struct ASTNode
         NODE_IF,
         NODE_FOR,
         NODE_FOREACH,
+<<<<<<< Updated upstream
+=======
+        NODE_SUBSCRIPT,
+        NODE_FIELD_ACCESS,
+        NODE_PTR_FIELD_ACCESS,
+>>>>>>> Stashed changes
         NODE_FUNC_DEF,
         NODE_EXTERN_FUNC_DEF,
         NODE_USE_DIRECTIVE,
@@ -331,11 +403,19 @@ typedef struct ASTNode
         ReturnNode return_node;
         UseDirectiveNode use_node;
         UnaryOPNode unary_op_node;
+        PostfixOPNode postfix_op_node;
+        StdAlone_PostfixOPNode stdalone_postfix_op_node;
         CastNode cast_node;
         SizeOfNode sizeof_node;
         BinaryOPNode binary_op_node;
         ObjectNode object_node;
         EnumNode enum_node;
+<<<<<<< Updated upstream
+=======
+        FieldAccessNode field_access_node;
+        PtrFieldAccessNode ptr_field_access_node;
+        SubscriptNode subscript_node;
+>>>>>>> Stashed changes
         IdentifierNode identifier_node;
         NumberNode number_node;
         CharNode char_node;
@@ -364,7 +444,7 @@ Param *parseFunctionParameter(Token **tokens, int *token_pos);
 char *resolvePtrType(Token **tokens, int *token_pos);
 ASTNode *parsePtrAssignment(Token **tokens, int *token_pos);
 ASTNode *parseAssignment(Token **tokens, int *token_pos);
-
+ASTNode *parseReassignment(Token **tokens, int *token_pos);
 ASTNode *parseDeclaration(Token **tokens, int *token_pos);
 
 ASTNode *parseExpression(Token **tokens, int *token_pos);
@@ -379,6 +459,7 @@ int64_t foldBinOperation(int64_t left, int64_t right, char *binary_op);
 int64_t foldUnaryOperation(int64_t right, char *unary_op);
 ASTNode *tryFoldBinary(ASTNode *left, ASTNode *right, char *op);
 ASTNode *tryFoldUnary(ASTNode *right, char *op);
+char *tryResolveType(Token **tokens, int *token_pos);
 
 void print_ast(ASTNode *program, int indent);
 void free_ast(ASTNode *node);

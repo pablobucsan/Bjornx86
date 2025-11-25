@@ -1,0 +1,33 @@
+#use "libraries/user_libs/bstdio.bjo"
+
+
+
+object A 
+{
+    uint32 a;
+    uint32 b;
+    uint32 c;
+    uint32 d;
+    uint32 e;
+};
+
+object B 
+{
+    uint32 count;
+    uint32 number;
+    uint32 dummy;
+    A instance;
+};
+
+func void f(ptr<B> b)
+{
+    return;
+}
+
+func void main()
+{
+    A a; 
+    B b;
+
+    a = b.instance; 
+}

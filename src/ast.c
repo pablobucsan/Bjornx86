@@ -137,6 +137,78 @@ void demand_token(Token **tokens, int *token_pos, TokenType type, char *value)
     exit(1);
 }
 
+<<<<<<< Updated upstream
+=======
+int is_type_array(char *type)
+{
+    int i = 0;
+    while (type[i] != '\0')
+    {
+        if (type[i] == '[')
+        {
+            return type[i + 1] - '0';
+        }
+        i++;
+    }
+
+    return 0;
+}
+
+
+int is_declaration(Token **tokens, int token_pos)
+{
+    int token_pos_copy = token_pos;
+
+    if (tokens[token_pos_copy]->tk_type != TOKEN_IDENTIFIER && tokens[token_pos_copy]->tk_type != TOKEN_KEYWORD && 
+    tokens[token_pos_copy]->tk_type != TOKEN_TYPE) { return 0; }
+
+    printf("token_pos_copy = %i \n", token_pos_copy);
+    char *type = tryResolveType(tokens, &token_pos_copy);
+    printf("token_pos_copy = %i \n", token_pos_copy);
+
+    if (tokens[token_pos_copy]->tk_type == TOKEN_IDENTIFIER && strcmp(tokens[token_pos_copy + 1]->tk_value, ";") == 0) { return 1; }
+
+    return 0;
+}
+
+int is_assignment(Token **tokens, int token_pos)
+{
+    printf("Checking if its assignment. Current token = %s  \n", tokens[token_pos]->tk_value);
+    int token_pos_copy = token_pos;
+    
+    if (tokens[token_pos_copy]->tk_type != TOKEN_IDENTIFIER && tokens[token_pos_copy]->tk_type != TOKEN_KEYWORD && 
+    tokens[token_pos_copy]->tk_type != TOKEN_TYPE) { printf("here\n"); return 0; }
+
+    printf("token_pos_copy = %i \n", token_pos_copy);
+    char *type = tryResolveType(tokens, &token_pos_copy);
+    printf("######## tried resolving type: %s \n", type);
+    printf("token_pos_copy = %i \n", token_pos_copy);
+    if (tokens[token_pos_copy]->tk_type == TOKEN_IDENTIFIER && strcmp(tokens[token_pos_copy + 1]->tk_value, "=") == 0) { return 1; }
+
+    return 0;
+}
+
+int is_reassignment(Token **tokens, int token_pos)
+{
+    printf("Checking if its reassingment. Current token = %s \n", tokens[token_pos]->tk_value);
+    int i = token_pos;
+    int offset = 0;
+    while (tokens[i]->tk_type != TOKEN_EOF)
+    {
+        if (strcmp(tokens[i]->tk_value, ";") == 0) { return 0; }
+
+        if (is_assignable_op(tokens, &token_pos, offset)) { printf("It is \n"); return 1; }
+
+        i++;
+        offset++;
+    }
+
+    printf("It's not\n");
+    return 0;
+}
+
+
+>>>>>>> Stashed changes
 ASTNode *parseProgram(Token **tokens, int *token_pos)
 {
     ASTNode *program = malloc(sizeof(ASTNode ));
@@ -318,6 +390,7 @@ ASTNode *parseStatement(Token **tokens, int *token_pos)
         //Create for node
         ASTNode *ast_for = malloc(sizeof(ASTNode ));
         ast_for->node_type = NODE_FOR;
+        printf("Creating node for\n");
 
         //Move past "for" and "("
         (*token_pos)++;
@@ -329,7 +402,8 @@ ASTNode *parseStatement(Token **tokens, int *token_pos)
         ast_for->for_node.condition_expr = parseExpression(tokens, token_pos);
         demand_token(tokens, token_pos,TOKEN_SYMBOL, ";");
 
-        ast_for->for_node.reassignment_expr = parseAssignment(tokens, token_pos);
+        // To allow "i++" and "i += n" this has to be parseExpression, not only parseReassingment
+        ast_for->for_node.reassignment_expr = parseExpression(tokens, token_pos);
         demand_token(tokens, token_pos,TOKEN_SYMBOL, ")");
         demand_token(tokens, token_pos,TOKEN_SYMBOL, "{");
 
@@ -609,7 +683,6 @@ ASTNode *parseStatement(Token **tokens, int *token_pos)
         }
         
         demand_token(tokens, token_pos, TOKEN_SYMBOL, "}");
-        demand_token(tokens, token_pos, TOKEN_SYMBOL, ";");
         return ast_enum;
     }
 
@@ -646,15 +719,18 @@ ASTNode *parseStatement(Token **tokens, int *token_pos)
 
         while (strcmp(tokens[*token_pos]->tk_value, "}") != 0)
         {
+            // 23/11 - Reallocate enough memory to allow more declarations. maybe another day holy shit
+
+
             ast_object->object_node.declarations[ast_object->object_node.declaration_count] = parseDeclaration(tokens, token_pos);
             ast_object->object_node.declaration_count++;
             demand_token(tokens, token_pos, TOKEN_SYMBOL, ";");
         }
 
         demand_token(tokens, token_pos, TOKEN_SYMBOL, "}");
-        demand_token(tokens, token_pos, TOKEN_SYMBOL, ";");
         return ast_object;
     }
+<<<<<<< Updated upstream
 
     //Ptr field reassignment   "(" "*" ptr_id ")"
     else if (strcmp(tokens[*token_pos]->tk_value, "(") == 0 && strcmp(tokens[*token_pos + 1]->tk_value, "*" ) == 0)
@@ -692,18 +768,49 @@ ASTNode *parseStatement(Token **tokens, int *token_pos)
 
     else if (tokens[*token_pos]->tk_type == TOKEN_TYPE || strcmp(tokens[*token_pos]->tk_value, "object") == 0
     ||  strcmp(tokens[*token_pos]->tk_value, "enum") == 0  ||tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER )
+=======
+
+    // Assignments.
+    //assignment := type identifier "=" expression ";"
+    else if (is_assignment(tokens, *token_pos))
+>>>>>>> Stashed changes
     {
         ASTNode *node = parseAssignment(tokens, token_pos);
         demand_token(tokens, token_pos,TOKEN_SYMBOL, ";");
         return node;
     }
 
-    else
+    // Declaration
+    else if (is_declaration(tokens, *token_pos) )
     {
-        fprintf(stderr, "Unsupported token type when parsing statement: %s '%s' \n",
-                tokenTypeToStr(tokens[*token_pos]->tk_type), tokens[*token_pos]->tk_value);
-        exit(1);
+        ASTNode *node = malloc(sizeof(ASTNode));
+        node->node_type = NODE_DECLARATION;
+        node = parseDeclaration(tokens, token_pos);
+
+        return node;
     }
+    
+    // Reassignment 
+    else if (is_reassignment(tokens, *token_pos))
+    {
+        ASTNode *node = parseReassignment(tokens, token_pos);
+        demand_token(tokens, token_pos, TOKEN_SYMBOL, ";");
+        return node;
+    }
+
+    // Assume its an expression for now 
+    ASTNode *expr = parseExpression(tokens, token_pos);
+    expr->node_type = NODE_STDALONE_POSTFIX_OP;
+    demand_token(tokens, token_pos, TOKEN_SYMBOL, ";");
+    return expr;
+
+
+    // else
+    // {
+    //     fprintf(stderr, "Unsupported token type when parsing statement: %s '%s' \n",
+    //             tokenTypeToStr(tokens[*token_pos]->tk_type), tokens[*token_pos]->tk_value);
+    //     exit(1);
+    // }
 }
 
 Param *parseFunctionParameter(Token **tokens, int *token_pos)
@@ -831,6 +938,7 @@ ASTNode *parsePtrAssignment(Token **tokens, int *token_pos)
         return ptr_reassignment_node;
     }
 
+<<<<<<< Updated upstream
     //Pointer type case. Could be declaration or assignment
     if (strcmp(tokens[*token_pos]->tk_value, "ptr") == 0)
     {
@@ -840,8 +948,88 @@ ASTNode *parsePtrAssignment(Token **tokens, int *token_pos)
         //Get the identifier
         char *identifier = tokens[*token_pos]->tk_value;
         //Advance past identifier
-        (*token_pos)++;
+=======
+// Function to resolve the type 
+char *tryResolveType(Token **tokens, int *token_pos)
+{
 
+     char *typeBuffer = malloc(256);
+    memset(typeBuffer, 0, 256);
+
+    if (strcmp(tokens[*token_pos]->tk_value, "ptr") == 0)
+    {
+        // Handle pointer type recursively
+        char *ptrType = resolvePtrType(tokens, token_pos);
+        strcat(typeBuffer, ptrType);
+        free(ptrType);
+    }
+    else if (tokens[*token_pos]->tk_type == TOKEN_TYPE || tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER)
+    {
+        strcat(typeBuffer, tokens[*token_pos]->tk_value);
+        (*token_pos)++;
+    }
+    else
+    {
+        fprintf(stderr, "Unexpected token when resolving type: '%s'\n", tokens[*token_pos]->tk_value);
+        exit(1);
+    }
+
+    // Handle optional array [size]
+    if (tokens[*token_pos]->tk_type == TOKEN_SYMBOL && strcmp(tokens[*token_pos]->tk_value, "[") == 0)
+    {
+        (*token_pos)++;
+        if (tokens[*token_pos]->tk_type != TOKEN_NUMBER)
+        {
+            fprintf(stderr, "Array size must be a number, got '%s'\n", tokens[*token_pos]->tk_value);
+            exit(1);
+        }
+
+        strcat(typeBuffer, " [");
+        strcat(typeBuffer, tokens[*token_pos]->tk_value);
+        strcat(typeBuffer, "]");
+
+        (*token_pos)++;
+        // Expect closing ']'
+        if (tokens[*token_pos]->tk_type != TOKEN_SYMBOL || strcmp(tokens[*token_pos]->tk_value, "]") != 0)
+        {
+            fprintf(stderr, "Expected ']' after array size, got '%s'\n", tokens[*token_pos]->tk_value);
+            exit(1);
+        }
+        (*token_pos)++;
+    }
+
+    return typeBuffer;
+    
+}
+
+
+// Function to resolve the type 
+char *resolveType(Token **tokens, int *token_pos)
+{
+
+     char *typeBuffer = malloc(256);
+    memset(typeBuffer, 0, 256);
+
+    if (strcmp(tokens[*token_pos]->tk_value, "ptr") == 0)
+    {
+        // Handle pointer type recursively
+        char *ptrType = resolvePtrType(tokens, token_pos);
+        strcat(typeBuffer, ptrType);
+        free(ptrType);
+    }
+    else if (tokens[*token_pos]->tk_type == TOKEN_TYPE || tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER)
+    {
+        strcat(typeBuffer, tokens[*token_pos]->tk_value);
+>>>>>>> Stashed changes
+        (*token_pos)++;
+    }
+    else
+    {
+        fprintf(stderr, "Unexpected token when resolving type: '%s'\n", tokens[*token_pos]->tk_value);
+        exit(1);
+    }
+
+<<<<<<< Updated upstream
         //Check whether it is assignment or declaration
         if ( expect_token(tokens, token_pos, TOKEN_ASSIGN, "=") == 1)
         {
@@ -874,6 +1062,35 @@ ASTNode *parsePtrAssignment(Token **tokens, int *token_pos)
         }
 
     }
+=======
+    // Handle optional array [size]
+    if (tokens[*token_pos]->tk_type == TOKEN_SYMBOL && strcmp(tokens[*token_pos]->tk_value, "[") == 0)
+    {
+        (*token_pos)++;
+        if (tokens[*token_pos]->tk_type != TOKEN_NUMBER)
+        {
+            fprintf(stderr, "Array size must be a number, got '%s'\n", tokens[*token_pos]->tk_value);
+            exit(1);
+        }
+
+        strcat(typeBuffer, " [");
+        strcat(typeBuffer, tokens[*token_pos]->tk_value);
+        strcat(typeBuffer, "]");
+
+        (*token_pos)++;
+        // Expect closing ']'
+        if (tokens[*token_pos]->tk_type != TOKEN_SYMBOL || strcmp(tokens[*token_pos]->tk_value, "]") != 0)
+        {
+            fprintf(stderr, "Expected ']' after array size, got '%s'\n", tokens[*token_pos]->tk_value);
+            exit(1);
+        }
+        (*token_pos)++;
+    }
+
+    return typeBuffer;
+    
+}
+>>>>>>> Stashed changes
 
     else
     {
@@ -956,8 +1173,31 @@ char *resolvePtrType(Token **tokens, int *token_pos)
     return type;
 }
 
+<<<<<<< Updated upstream
 //TODO: SIMPLIFY THIS?
 //assignment  := ( ( "object"? identifier ) | builtinType | ptr "<" ("object"? identifier) | builtinType ">" ) identifier  "=" expression ";"
+=======
+ASTNode *parseReassignment(Token **tokens, int *token_pos)
+{
+    printf("Parsing a reassingment with current token = %s \n", tokens[*token_pos]->tk_value);
+    ASTNode *node = malloc(sizeof(ASTNode));
+    node->node_type = NODE_REASSIGNMENT;
+    printf("About to parse LValue\n");
+    node->reassignment_node.lvalue = parseLValue(tokens, token_pos);
+
+    printf("About to parse RValue \n");
+    node->reassignment_node.line_number = tokens[*token_pos]->line_number;
+    node->reassignment_node.op = tokens[*token_pos]->tk_type;
+    *(token_pos) += 1;
+    node->reassignment_node.expression = parseExpression(tokens, token_pos);
+
+    printf("Finished\n");
+    return node;
+}
+
+// assignment = type lvalue '=' expr;
+// type = object? identifier | enum? identifier | built-in type 
+>>>>>>> Stashed changes
 ASTNode *parseAssignment(Token **tokens, int *token_pos)
 {
     //This function is called whenever we encounter a TYPE, "object" or IDENTIFIER and no other case is possible
@@ -993,11 +1233,26 @@ ASTNode *parseAssignment(Token **tokens, int *token_pos)
         ast_instance->field_reassign_node.expression = parseExpression(tokens, token_pos);
         return ast_instance;
     }
+<<<<<<< Updated upstream
  
     // Check if the current token is a type (built-in or objectIdentifier)
     int is_type = (tokens[*token_pos]->tk_type == TOKEN_TYPE || tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER) && 
                     tokens[*token_pos + 1]->tk_type == TOKEN_IDENTIFIER;
     if (!is_type)
+=======
+
+    // At this point we have an identifier | type 
+    ASTNode *ast_assignment = malloc(sizeof(ASTNode));
+    ast_assignment->node_type = NODE_ASSIGNMENT;
+    
+
+    ast_assignment->assignment_node.type = resolveType(tokens, token_pos);
+
+    printf("########### WE RESOLVED A TYPE: %s \n", ast_assignment->assignment_node.type);
+
+    // Need an identifier for the variable 
+    if (tokens[*token_pos]->tk_type != TOKEN_IDENTIFIER)
+>>>>>>> Stashed changes
     {
         // If not a type, it must be a reassignment
         if (tokens[*token_pos]->tk_type == TOKEN_IDENTIFIER && is_assignable_op(tokens,token_pos,1))
@@ -1051,6 +1306,7 @@ ASTNode *parseAssignment(Token **tokens, int *token_pos)
         return ast_assignment;
     }
 
+<<<<<<< Updated upstream
     else
     {
         // Declaration case
@@ -1074,6 +1330,81 @@ ASTNode *parseDeclaration(Token **tokens,int *token_pos)
 
         //ptr type
         if (strcmp(tokens[*token_pos]->tk_value, "ptr") == 0)
+=======
+
+    if (strcmp(tokens[*token_pos]->tk_value,";") == 0)
+    {
+        ASTNode *ast_declaration = malloc(sizeof(ASTNode));
+        ast_declaration->node_type = NODE_DECLARATION;
+        ast_declaration->declaration_node.type = ast_assignment->assignment_node.type;
+        ast_declaration->declaration_node.identifier = ast_assignment->assignment_node.identifier;
+        printf("WE ARE HERE FOR TYPE : %s \n", ast_declaration->declaration_node.type);
+
+
+        free(ast_assignment);
+        return ast_declaration;
+    }
+}
+
+// Declaration  := type identifier ';'
+// type = object? identifier | enum? identifier | built-in type 
+ASTNode *parseDeclaration(Token **tokens,int *token_pos)
+{
+    printf("PARSING A DECLARATION \n");
+
+    // Skip optinals keywords "object" "enum"
+    expect_token(tokens, token_pos, TOKEN_KEYWORD, "object");
+    expect_token(tokens, token_pos, TOKEN_KEYWORD, "enum");
+
+    // Ensure the next token is a type (built-in or objectIdentifier)
+    if (tokens[*token_pos]->tk_type != TOKEN_TYPE && tokens[*token_pos]->tk_type != TOKEN_IDENTIFIER)
+    {
+        fprintf(stderr, "Expected type (Identifier | built-in type) in declaration.\n");
+        exit(1);
+    }
+
+    
+    // At this point we have an identifier | type 
+    ASTNode *ast_declaration = malloc(sizeof(ASTNode));
+    ast_declaration->node_type = NODE_DECLARATION;
+
+
+    ast_declaration->declaration_node.type = resolveType(tokens, token_pos);
+    //(*token_pos)++;
+
+    printf("Current token is %s \n", tokens[*token_pos]->tk_value);
+
+
+    // Need an identifier for the variable 
+    if (tokens[*token_pos]->tk_type != TOKEN_IDENTIFIER)
+    {
+        fprintf(stderr, "Expected variable identifier in declaration.\n");
+        exit(1);
+    }
+
+    // At this point we have an identifier for the variable 
+    ast_declaration->declaration_node.identifier = tokens[*token_pos]->tk_value;
+
+    (*token_pos)++;
+    
+    return ast_declaration;
+
+
+}
+
+ASTNode *parseArrayInit(Token **tokens, int *token_pos, char *arr_name)
+{
+    ASTNode *ast_array = malloc(sizeof(ASTNode));
+    ast_array->node_type = NODE_ARRAY_INIT;
+    ast_array->array_init_node.capacity = 100;
+    ast_array->array_init_node.elements = malloc(sizeof(ASTNode *) * ast_array->array_init_node.capacity);
+    ast_array->array_init_node.arr_name = arr_name;
+    ast_array->array_init_node.size = 0;
+
+    while (tokens[*token_pos]->tk_type != TOKEN_EOF && strcmp(tokens[*token_pos]->tk_value, "]"))
+    {
+        if (ast_array->array_init_node.size + 1 > ast_array->array_init_node.capacity)
+>>>>>>> Stashed changes
         {
             ast_declaration->declaration_node.type = resolvePtrType(tokens, token_pos);
         }
@@ -1113,7 +1444,21 @@ ASTNode *parseExpression(Token **tokens, int *token_pos)
         return ast_empty;
     }
 
+<<<<<<< Updated upstream
     ASTNode *left = parseExpr_Precedence5(tokens, token_pos);
+=======
+    // Reassignment 
+    if (is_reassignment(tokens, *token_pos))
+    {
+        ASTNode *ast_reassignment = parseReassignment(tokens, token_pos);
+        ast_reassignment->node_type = NODE_REASSIGNMENT;
+        return ast_reassignment;
+    }
+
+
+
+    ASTNode *left = parseExpr_Precedence7(tokens, token_pos);
+>>>>>>> Stashed changes
 
     while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
            (strcmp(tokens[*token_pos]->tk_value, "||") == 0))
@@ -1349,6 +1694,157 @@ ASTNode *parseExpr_Precedence1(Token **tokens, int *token_pos)
     return left;
 }
 
+<<<<<<< Updated upstream
+=======
+// Unary opeartions, only * allowed as lvalue
+ASTNode *parseLValue_Precedence2(Token **tokens, int *token_pos)
+{
+    printf("PARSING LVALUE PRECEDENCE 2\n");
+    ASTNode *operand = NULL;
+
+    while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
+           (strcmp(tokens[*token_pos]->tk_value, "*") == 0))
+    {
+         //Create a Unary Node
+        ASTNode *ast_unary = malloc(sizeof(ASTNode ));
+        ast_unary->node_type = NODE_UNARY_OP;
+        ast_unary->unary_op_node.op = tokens[*token_pos]->tk_value;
+        (*token_pos)++;
+        ast_unary->unary_op_node.right = parseExpr_Precedence1(tokens, token_pos);
+        
+        ASTNode *ast_number = tryFoldUnary(ast_unary->unary_op_node.right, ast_unary->unary_op_node.op);
+
+        if (ast_number != NULL)
+        {
+            operand = ast_number;
+            continue;
+        }
+
+        operand = ast_unary;
+    }
+
+    if (operand != NULL) { return operand; }
+
+    return parseExpr_Precedence1(tokens, token_pos);
+
+}
+
+// Unary operations (unary -, address &, dereference * ). Precedence 2
+ASTNode *parseExpr_Precedence2(Token **tokens, int *token_pos)
+{
+   
+    ASTNode *operand = NULL;
+
+    while (tokens[*token_pos]->tk_type == TOKEN_OPERATOR &&
+           (strcmp(tokens[*token_pos]->tk_value, "*") == 0 ||
+            strcmp(tokens[*token_pos]->tk_value, "&") == 0 ||
+            strcmp(tokens[*token_pos]->tk_value, "-") == 0))
+    {
+         //Create a Unary Node
+        ASTNode *ast_unary = malloc(sizeof(ASTNode ));
+        ast_unary->node_type = NODE_UNARY_OP;
+        ast_unary->unary_op_node.op = tokens[*token_pos]->tk_value;
+        (*token_pos)++;
+        ast_unary->unary_op_node.right = parseExpr_Precedence1(tokens, token_pos);
+        
+        ASTNode *ast_number = tryFoldUnary(ast_unary->unary_op_node.right, ast_unary->unary_op_node.op);
+
+        if (ast_number != NULL)
+        {
+            operand = ast_number;
+            continue;
+        }
+
+        operand = ast_unary;
+    }
+
+    if (operand != NULL) { return operand; }
+
+    return parseExpr_Precedence1(tokens, token_pos);
+}
+
+
+
+// Subscription and field access. [] and . and -> 
+// Precedence 1.
+ASTNode *parseExpr_Precedence1(Token **tokens, int *token_pos)
+{
+    printf("Parsing expr_precedence 1\n");
+    ASTNode *base = parseUnit(tokens, token_pos);
+
+
+
+    while ( (tokens[*token_pos]->tk_type == TOKEN_SYMBOL &&
+           (strcmp(tokens[*token_pos]->tk_value, "[") == 0 ||
+            strcmp(tokens[*token_pos]->tk_value, ".") == 0 || 
+            strcmp(tokens[*token_pos]->tk_value, "->") == 0)) || 
+
+            (tokens[*token_pos]->tk_type == TOKEN_OPERATOR && 
+            (strcmp(tokens[*token_pos]->tk_value,"++") == 0 || 
+            strcmp(tokens[*token_pos]->tk_value, "--") == 0)))
+    {
+        // Subscription 
+        if (strcmp(tokens[*token_pos]->tk_value, "[") == 0)
+        {
+            (*token_pos)++;
+            ASTNode *ast_subscript = malloc(sizeof(ASTNode));
+            ast_subscript->node_type = NODE_SUBSCRIPT;
+            ast_subscript->subscript_node.line_number = tokens[*token_pos]->line_number;
+            ast_subscript->subscript_node.base = base;
+
+            ast_subscript->subscript_node.index = parseExpression(tokens, token_pos);
+            demand_token(tokens, token_pos, TOKEN_SYMBOL, "]");
+
+            base = ast_subscript;
+        }
+        
+        // Field access
+        else if (strcmp(tokens[*token_pos]->tk_value, ".") == 0)
+        {
+            (*token_pos)++;
+            ASTNode *ast_field_access = malloc(sizeof(ASTNode));
+            ast_field_access->node_type = NODE_FIELD_ACCESS;
+            ast_field_access->field_access_node.base = base; 
+            ast_field_access->field_access_node.field_name = tokens[*token_pos]->tk_value;
+            (*token_pos)++;
+
+            base = ast_field_access;
+        }
+
+        // Ptr field access 
+        else if (strcmp(tokens[*token_pos]->tk_value, "->") == 0)
+        {
+            (*token_pos)++;
+            ASTNode *ast_ptr_field_access = malloc(sizeof(ASTNode));
+            ast_ptr_field_access->node_type = NODE_PTR_FIELD_ACCESS;
+            ast_ptr_field_access->ptr_field_access_node.base = base;
+            ast_ptr_field_access->ptr_field_access_node.field_name = tokens[*token_pos]->tk_value;
+            (*token_pos)++;
+
+            base = ast_ptr_field_access;
+        }
+
+        // Post fix operators
+        else if (strcmp(tokens[*token_pos]->tk_value, "++") == 0 || strcmp(tokens[*token_pos]->tk_value, "--") == 0)
+        {
+            ASTNode *ast_postfix_op = malloc(sizeof(ASTNode));
+            ast_postfix_op->node_type = NODE_POSTFIX_OP;
+            ast_postfix_op->postfix_op_node.left = base;
+            ast_postfix_op->postfix_op_node.op = tokens[*token_pos]->tk_value;
+            (*token_pos)++;
+
+            base = ast_postfix_op;
+        }
+
+    }
+
+    return base;
+}
+
+
+
+
+>>>>>>> Stashed changes
 
 ASTNode *tryFoldBinary(ASTNode *left, ASTNode *right, char *op)
 {
@@ -1656,6 +2152,19 @@ ASTNode *parseUnit(Token **tokens, int *token_pos)
         return expr;
     }
 
+<<<<<<< Updated upstream
+=======
+    // Maybe in the future allow reassingments of arrays by arr = [1,2,3]. ( C does not allow )
+    // // Special case. Expression begins with '[' -> array init 
+    // else if (strcmp(tokens[*token_pos]->tk_value, "[") == 0)
+    // {
+    //     (*token_pos)++;
+    //     ASTNode *expr = parseArrayInit(tokens, token_pos, );
+    //     return ast_assignment;
+    // }
+    
+    // Not supported
+>>>>>>> Stashed changes
     else
     {
         fprintf(stderr, "Unit type is not supported: %s (%s) \n",
@@ -1686,6 +2195,55 @@ void print_ast(ASTNode *program, int indent)
             break;
         }
         
+<<<<<<< Updated upstream
+=======
+        case NODE_SUBSCRIPT:
+        {
+            printf("Subscript: \n");
+            for (int i = 0; i < indent; i++) printf("  ");
+            printf("Base Array:\n");
+            print_ast(program->subscript_node.base, indent + 1);
+
+            for (int i = 0; i < indent; i++) printf("  ");
+            printf("Index: \n");
+            print_ast(program->subscript_node.index, indent + 1);
+            break;
+        }
+        
+        case NODE_ARRAY_INIT:
+        {
+            printf("Array Init. Identifier = %s\n", program->array_init_node.arr_name);
+            for (int k = 0; k < program->array_init_node.size; k++)
+            {
+                for (int i = 0; i < indent; i++) printf("  ");
+                printf("Element %i = \n", k);
+                print_ast(program->array_init_node.elements[k], indent + 1);
+            }
+            break;
+        }
+
+        case NODE_FIELD_ACCESS:
+        {
+            printf("Field access: \n");
+            print_ast(program->field_access_node.base, indent + 1);
+
+            for (int i = 0; i < indent + 1; i++) printf("  ");
+            printf("Field name = %s\n", program->field_access_node.field_name);
+            break;
+        }
+
+        case NODE_PTR_FIELD_ACCESS:
+        {
+            printf("Ptr field access: \n");
+            print_ast(program->ptr_field_access_node.base, indent + 1);
+
+            for (int i = 0; i < indent + 1; i++) { printf("  "); }
+            printf("Field name = %s \n", program->ptr_field_access_node.field_name);
+            break;
+
+        }
+        
+>>>>>>> Stashed changes
         case NODE_CB_ASSIGNMENT:
         {
                 printf("Callback assignment. Alias: %s, %s(", program->cbassignment_node.cb_identifier,
@@ -1740,6 +2298,20 @@ void print_ast(ASTNode *program, int indent)
             break;
         }
 
+        case NODE_POSTFIX_OP:
+        {
+            printf("Postfix op: %s \n", program->postfix_op_node.op);
+            print_ast(program->postfix_op_node.left, indent + 1);
+            break;
+        }
+
+        case NODE_STDALONE_POSTFIX_OP:
+        {
+            printf("Stdalone Postfix op: %s \n", program->stdalone_postfix_op_node.op);
+            print_ast(program->stdalone_postfix_op_node.left, indent + 1);
+            break;
+        }
+
         case NODE_CAST:
         {
             printf("Cast to: %s \n", program->cast_node.castType);
@@ -1784,31 +2356,31 @@ void print_ast(ASTNode *program, int indent)
 
         case NODE_NUMBER:
         {
-            printf("Number: %" PRId64 "\n", program->number_node.number_value);
+            printf("Number = %" PRId64 "\n", program->number_node.number_value);
             break;
         }
 
         case NODE_CHAR:
         {
-            printf("Char: %c \n", program->char_node.char_value);
+            printf("Char = %c \n", program->char_node.char_value);
             break;
         }
 
         case NODE_STR:
         {
-            printf("String: %s \n", program->str_node.str_value);
+            printf("String = %s \n", program->str_node.str_value);
             break;
         }
 
         case NODE_BOOL:
         {
-            printf("Bool: %s \n", program->bool_node.bool_value);
+            printf("Bool = %s \n", program->bool_node.bool_value);
             break;
         }
 
         case NODE_IDENTIFIER:
         {
-            printf("Identifier: %s \n", program->identifier_node.name);
+            printf("Identifier = %s \n", program->identifier_node.name);
             break;
         }
 
@@ -1848,8 +2420,11 @@ void print_ast(ASTNode *program, int indent)
         case NODE_FOR:
         {
             printf("For: \n");
+            for (int i = 0; i < indent; i++) printf("  "); printf("Assignment: \n");
             print_ast(program->for_node.assignment_expr, indent + 1);
+            for (int i = 0; i < indent; i++) printf("  "); printf("Condition: \n");
             print_ast(program->for_node.condition_expr, indent + 1);
+            for (int i = 0; i < indent; i++) printf("  "); printf("Update: \n");
             print_ast(program->for_node.reassignment_expr, indent + 1);
             print_ast(program->for_node.body, indent + 1);
             break;
@@ -2212,6 +2787,41 @@ void free_ast(ASTNode *node) {
 }
 
 
+<<<<<<< Updated upstream
+=======
+int is_statement(ASTNode *node)
+{
+    switch(node->node_type)
+    {
+        case NODE_ASSIGNMENT:
+        case NODE_RETURN:
+        case NODE_DECLARATION:
+        case NODE_WHILE:
+        case NODE_FOR:
+        case NODE_FOREACH:
+        case NODE_IF:
+        case NODE_STDALONE_FUNC_CALL:
+        case NODE_STDALONE_POSTFIX_OP:
+        case NODE_REASSIGNMENT: return 1;
+        
+        default: return 0;
+    }
+}
+
+int is_pushing_scope(ASTNode *node)
+{
+    switch (node->node_type) 
+    {
+        case NODE_FUNC_DEF:
+        case NODE_IF:
+        case NODE_FOR:
+        case NODE_FOREACH:
+        case NODE_WHILE: return 1;
+
+        default: return 0;
+    }
+}
+>>>>>>> Stashed changes
 
 char *astTypeToStr(ASTNode *node)
 {
@@ -2251,5 +2861,12 @@ char *astTypeToStr(ASTNode *node)
         case NODE_OBJECT: return "OBJECT";
         case NODE_STR: return "STRING";
         case NODE_WHILE: return "WHILE";
+        case NODE_ARRAY_INIT: return "ARRAY_INIT";
+        case NODE_FIELD_ACCESS: return "FIELD_ACCESS";
+        case NODE_PTR_FIELD_ACCESS: return "PTR_FIELD_ACCESS";
+        case NODE_POSTFIX_OP: return "POSTFIX_OP";
+        case NODE_STDALONE_POSTFIX_OP: return "STDALONE_POSTFIX_OP";
+
+        default: return "UNKNOWN AST TYPE";
     }
 }

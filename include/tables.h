@@ -51,7 +51,11 @@ typedef struct FunctionType
 }FunctionType;
 
 
-
+typedef enum SymbolTableKind
+{
+    KIND_FUNCTION_ST,
+    KIND_OBJECT_ST
+}SymbolTableKind;
 
 typedef enum ContextType
 {
@@ -87,7 +91,9 @@ typedef struct Symbol
     char *identifier;               //name
     int scope;                      //0 = global, 1 = local
     int index;                      //index within table
+    int param_index;                // keeping track of the param index, -1 if its not a param
     int offset;                     // offset in memory
+    int size;                       // size of the symbol
     ContextType declaration_ctx;    // Where has this symbol been defined: inside an IF,FOR,WHILE...? 
     int ctx_block_id;               // In what block has it been defined? Two iterators in two consecutive for loops have the same 
                                     // scope and declaration_ctx but have a different ctx_block_id 
@@ -129,6 +135,7 @@ typedef struct Enum
 
 typedef struct SymbolTable
 {
+    SymbolTableKind kind;
     Symbol **symbols;
     int size;
     int weight;

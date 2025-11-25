@@ -96,10 +96,16 @@ void compile(CompilerOptions *CO)
     
     if (CO->CF->print_tokens) { print_tokens(tokens); }
     
+
+    print_tokens(tokens);
+
     // GENERATE AST REPRESENTATION
     init_usedFiles(5);
+    printf("==== ABOUT TO PARSE ====\n");
     ASTNode *program = parseProgram(tokens, &token_pos);
-    
+    printf("==== DONE PARSING ==== \n");
+
+    print_ast(program, 0);
     if (CO->CF->print_ast) { print_ast(program,0); }
         
     // ANALYZE AND POPULATE SYMBOL, FUNCTION, OBJECT, ENUM TABLES
@@ -108,9 +114,17 @@ void compile(CompilerOptions *CO)
     init_gb_object_table(1);
     init_gb_enum_table(1); 
     
+<<<<<<< Updated upstream
     analyze(program, gb_symbolTable, gb_functionTable, SCRIPT_USER); 
         
 
+=======
+    printf("==== ABOUT TO ANALYZE ====\n");
+    analyze(program, gb_symbolTable, gb_functionTable, SCRIPT_USER); 
+    printf("==== DONE ANALYZING ====\n");
+
+    printf("Done analyzing\n");    
+>>>>>>> Stashed changes
     // BUILD AND GENERATE x86_64 INSTRUCTIONS
     char *file = CO->CA->outputPath;
     char *buffer = ".asm\0";

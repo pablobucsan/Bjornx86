@@ -107,6 +107,12 @@ typedef enum UnaryOPCode
 
 }UnaryOPCode;
 
+typedef enum PostfixOPCode
+{
+    POSTFIX_INC,
+    POSTFIX_DEC
+}PostfixOPCode;
+
 
 
 
@@ -155,7 +161,14 @@ extern Matcher *matcher;
 
 void initMatcher();
 Register *matchExpectedRegister();
+<<<<<<< Updated upstream
 void expectateRegister(RegisterType registerType, int size);
+=======
+void expectRegister(RegisterType registerType, int size);
+Register *getDirectTemporaryRegisterForSize(int size);
+void freeRegister(Register *reg);
+char *getWordForSize(int size);
+>>>>>>> Stashed changes
 
 
 void init_GPR();

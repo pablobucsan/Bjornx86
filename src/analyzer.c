@@ -163,6 +163,11 @@ int is_type_char(char *str)
     return strcmp(str, "char") == 0;
 }
 
+int is_type_ptr(char *str)
+{
+    return strncmp(str, "ptr", 3) == 0;
+}
+
 int is_type_bool(char *str) 
 {
     return strcmp(str, "bool") == 0;
@@ -268,13 +273,137 @@ void compare_ret_type(char *func_name, char *declared, char *actual) {
     exit(1);
 }
 
+<<<<<<< Updated upstream
 void compare_types(char *identifier, char *declared, char *actual) 
 {
+=======
+void analyze_types_with_reassign_symbol(char *lvalue_type, char *rvalue_type, TokenType reassign_symbol)
+{
+    
+    // TOKEN_ADD_ASSIGN,
+    // TOKEN_SUB_ASSIGN,
+    // TOKEN_MUL_ASSIGN,
+    // TOKEN_DIV_ASSIGN,
+    // TOKEN_MOD_ASSIGN,
+
+    switch(reassign_symbol)
+    {
+        case TOKEN_ASSIGN: return;
+        case TOKEN_ADD_ASSIGN:
+        case TOKEN_SUB_ASSIGN:
+        case TOKEN_DIV_ASSIGN:
+        case TOKEN_MUL_ASSIGN:
+        case TOKEN_MOD_ASSIGN:
+        {
+            if (is_type_ptr(lvalue_type) && is_type_int(rvalue_type)) { return; }
+            if (is_type_int(lvalue_type) && is_type_int(rvalue_type)) { return; }
+
+            fprintf(stderr, "Can't use the reassing symbol: '%s' for types that are not integers. Got '%s' and '%s' \n", tokenTypeToStr(reassign_symbol) ,lvalue_type, rvalue_type);
+            exit(1);
+        }
+
+        default:
+        {
+            fprintf(stderr, "Makes no sense to have reassign symbol: '%s' to analyze types with reassing symbol\n", tokenTypeToStr(reassign_symbol));
+            exit(1);
+        }
+    }
+
+
+}
+
+
+void compare_reassign_types(int line_number, char *lvalue_type, char *rvalue_type)
+{
+    char *declared = lvalue_type;
+    char *actual = rvalue_type;
+    if (strcmp(declared, actual) == 0) return;
+     
+    if (is_type_array(declared) != is_type_array(actual))
+    {
+        fprintf(stderr, "Src: '%s' . Reassignment in L=%i: LValue expects type: '%s' but got: '%s'\n", tracker.current_src_file, line_number ,declared, actual);
+        exit(1);
+    }
+    
+    // 24-11 : No need to get base type here, they just gotta be the same
+    //char *declared_base = get_base_type(declared);
+    //char *actual_base = get_base_type(actual);
+
+    char *declared_base = declared;
+    char *actual_base = actual;
+   
+    if (is_type_int(declared_base) && is_type_int(actual_base)) 
+    {
+        int declared_rank = (strstr(declared_base, "8") ? 1 : (strstr(declared_base, "16")) ? 2 : 3);
+        int actual_rank = (strstr(actual_base, "8") ? 1 : (strstr(actual_base, "16")) ? 2 : 3);
+        
+        int declared_unsigned = is_type_unsigned_int(declared_base);
+        int actual_unsigned = is_type_unsigned_int(actual_base);
+        
+        if (declared_unsigned && !actual_unsigned) 
+        {
+            fprintf(stderr, "Src: '%s'. Reassignment in L=%i: LValue expects unsigned: %s, but actual type is signed: %s\n",
+                    tracker.current_src_file, line_number, declared, actual);
+            exit(1);
+        }
+        
+        return;
+    }
+    
+
+    //enum type and uint8 are the same 
+    if ( (is_type_enum( gb_enumTable ,declared_base) && strcmp(actual_base, "uint8") == 0 )  || 
+        ( strcmp(declared_base, "uint8") == 0 && is_type_enum(gb_enumTable, actual_base) ))
+    {
+        return;
+    }
+
+    //chars and uint8 are the same
+    if ((strcmp(declared_base, "char") == 0 && strcmp(actual_base, "uint8") == 0) ||
+        (strcmp(actual_base, "char") == 0 && strcmp(declared_base, "uint8") == 0)) 
+    {
+        return;
+    }
+    
+    //ptr char and str are the same
+    if ((strcmp(declared_base, "ptr char") == 0 && strcmp(actual_base, "str") == 0) ||
+        (strcmp(declared_base, "str") == 0 && strcmp(actual_base, "ptr char") == 0)) 
+    {
+        return;
+    }
+    
+
+    if (strncmp(declared_base, "ptr", 3) == 0 && strcmp(actual_base, "ptr any") == 0) {
+        return;
+    }
+    
+    fprintf(stderr, "Src: '%s' . Reassignment in L=%i: LValue expects type: '%s', but got: '%s'\n",
+            tracker.current_src_file, line_number, declared, actual);
+    exit(1);
+
+}
+
+void compare_types(Symbol *s, char *declared, char *actual) 
+{
+    char *identifier = s->identifier;
+>>>>>>> Stashed changes
     //printf("Comparing types %s and %s \n", declared, actual);
     // Use the same rules as return type checking
     if (strcmp(declared, actual) == 0) return;
     
+<<<<<<< Updated upstream
     if (is_type_int(declared) && is_type_int(actual)) 
+=======
+    // 24/11: They just gotta be the same no need to get base type
+    //char *declared_base = get_base_type(declared);
+    //char *actual_base = get_base_type(actual);
+
+
+    char *declared_base = declared;
+    char *actual_base = actual;
+   
+    if (is_type_int(declared_base) && is_type_int(actual_base)) 
+>>>>>>> Stashed changes
     {
         int declared_rank = (strstr(declared, "8") ? 1 : (strstr(declared, "16")) ? 2 : 3);
         int actual_rank = (strstr(actual, "8") ? 1 : (strstr(actual, "16")) ? 2 : 3);
@@ -466,6 +595,7 @@ SymbolTable *init_object_lc_symbol_table(SymbolTable *parentST, int size)
 
     SymbolTable *st = malloc(sizeof(SymbolTable));
     st->symbols = malloc(size * sizeof(Symbol *));
+    st->kind = KIND_OBJECT_ST;
     st->count = 0;
     st->size = size;
     st->parentST = parentST;
@@ -480,6 +610,7 @@ SymbolTable *init_lc_symbol_table(SymbolTable *parentST, int size, SCRIPT_MODE s
 
     SymbolTable *st = malloc(sizeof(SymbolTable));
     st->symbols = malloc(size * sizeof(Symbol *));
+    st->kind = KIND_FUNCTION_ST;
     st->count = 0;
     st->size = size;
     st->parentST = parentST;
@@ -582,8 +713,14 @@ int do_symbols_clash(Symbol *s1, Symbol *s2)
 
 void add_symbol(SymbolTable *st, Symbol *s)
 {
+<<<<<<< Updated upstream
     //Resize if needed
     if (st->count + 1 >= st->size) { resize_symbol_table(st, 2 * st->size); }
+=======
+
+    //printf("Trying to add symbol: %s, st->count = %i \n", s->identifier, st->count);
+
+>>>>>>> Stashed changes
     //Dont allow duplicates
     for (int i = 0; i < st->count; i++)
     {
@@ -594,10 +731,81 @@ void add_symbol(SymbolTable *st, Symbol *s)
         }
     }
 
+<<<<<<< Updated upstream
     // printf("Added a symbol. Name: %s, Scope: %i, CTX: %s, Block_id: %i \n", s->identifier,s->scope, ctxToString(s->declaration_ctx),
            // s->ctx_block_id);
     st->symbols[st->count++] = s;
     st->weight += size_of_type(s->type);
+=======
+    //Resize if needed
+    if (st->count + 1 >= st->size) { resize_symbol_table(st, 2 * st->size); }
+
+
+    // If it's the smallest sized symbol, add at the end, otherwise it will be bigger than some element 
+    // and index of s will be changed within the for loop
+    int index_of_s = st->count;
+
+    // If the symbol table belongs to a function, then we sort to reduce padding. 
+    // Don't sort if it belongs to an object
+    if (st->kind == KIND_FUNCTION_ST)
+    {
+        //Order the table in correct order, big sizes first
+        for (int i = 0; i < st->count; i++)
+        {
+            if (s->size >= st->symbols[i]->size)
+            {
+                index_of_s = i;
+                // Add one to all the consecutive symbols' index
+                // and shift them one down
+                for (int j = st->count; j > i; j--)
+                {
+                    st->symbols[j] = st->symbols[j - 1];
+                    st->symbols[j]->index++;
+
+                }
+
+                break;
+            }
+        }
+    }
+
+    
+    // Add the symbol in its correct spot within the table
+    st->count++;
+    s->index = index_of_s;
+    st->symbols[s->index] = s;
+    // Finally add the size of the symbol 
+    s->size = size_of_type(s->type);
+
+    
+    // Finally, recompute the offsets for the symbols with the reorganized table
+    // only need to do so for the new inserted symbol and after
+    for (int i = s->index; i < st->count; i++)
+    {
+        st->symbols[i]->offset =  (i == 0) ? 0 : st->symbols[i - 1]->offset + st->symbols[i-1]->size;
+        // Align to an offset that is multiple of the variable size
+        st->symbols[i]->offset = align_to(st->symbols[i]->offset, st->symbols[i]->size);
+    }
+    
+
+    //print_symbolTable(st);
+
+    // Add the size of the symbol to the total weight of the table
+    st->weight += s->size;
+
+
+    // Keep track of the padding 
+    st->padding = 0;
+    for (int i = 1; i < st->count; i++)
+    {
+        st->padding += st->symbols[i]->offset - (st->symbols[i - 1]->offset + st->symbols[i - 1]->size);
+    }
+
+
+
+    printf("WEIGHT OF THE TABLE = %i, PADDING = %i\n", st->weight, st->padding);
+
+>>>>>>> Stashed changes
 }
 
 int assign_symbol_scope(SCRIPT_MODE script_mode)
@@ -725,7 +933,7 @@ void add_object(ObjectTable *ot, Object *o)
     //check for duplicate objects
     for (int i = 0; i < ot->count; i++)
     {
-        if (strcmp(ot->objects[i]->identifier,o->identifier))
+        if (strcmp(ot->objects[i]->identifier,o->identifier) == 0)
         {
             fprintf(stderr, "Redefinition of object: %s \n", o->identifier);
             exit(1);
@@ -735,6 +943,7 @@ void add_object(ObjectTable *ot, Object *o)
     //add
     if (ot->count + 1 >= ot->size) { resize_object_table(ot, 2 * ot->size); }
 
+    printf("ADDED OBJECT: %s, TO THE TABLE \n", o->identifier);
     ot->objects[ot->count++] = o;
 }
 
@@ -824,13 +1033,36 @@ Symbol *lookup_field(Object *object, char *field_id)
 }
 
 
+/**
+ * 
+ * 17/11: DEPRECATED: Since we are reordering the symbols to reduce padding,
+ * the first indexes no longer correspond to the parameters
+ */
+
 Symbol *lookup_identifierByIndex(SymbolTable *st, int index)
 {
 
-    if (st->symbols[index] == NULL) { fprintf(stderr, "Identifier by index returns NULL");
+    if (st->symbols[index] == NULL) { fprintf(stderr, "Identifier by index (%i) returns NULL", index);
         exit(1); }
     return st->symbols[index];
 }
+
+
+/**
+ * 
+ * 17/11: INSTEAD USE THIS
+ */
+
+ Symbol *get_ParamAtIndex(SymbolTable *st, int index)
+ {
+    for (int i = 0; i < st->count; i++)
+    {
+        if (st->symbols[i]->param_index == index) { return st->symbols[i]; }
+    }
+
+    fprintf(stderr, "No parameter at index: %s was found \n", index);
+    exit(1);
+ }
 
 char **get_paramTypes_from_Params(Param **params, int param_count)
 {
@@ -907,8 +1139,15 @@ int is_acceptable_param_type(char *candidateType, char *paramType)
     
     //At this point, both have the same depth
     //Get the base type of both
-    char *paramBaseType = get_base_type(paramType);
-    char *candidateBaseType = get_base_type(candidateType);
+
+    // 24/11: No need to get base type
+    //char *paramBaseType = get_base_type(paramType);
+    //char *candidateBaseType = get_base_type(candidateType);
+
+
+    char *paramBaseType = paramType;
+    char *candidateBaseType = candidateType;
+
     //Family types (paramType inherits from candidate)
     Object *child = check_object(gb_objectTable, paramBaseType);
     while (child != NULL)
@@ -967,6 +1206,8 @@ Function *check_function(FunctionTable *ft, int scope, char *identifier, char **
 
     return NULL;
 }
+
+
 Function *lookup_function(FunctionTable *ft, int scope, char *identifier, char **param_types, int param_count)
 {
     while (ft != NULL)
@@ -1049,6 +1290,16 @@ int align_to(int offset, int alignment)
 
 int size_of_type(char *type)
 {
+<<<<<<< Updated upstream
+=======
+    //printf("Calculating size_of_type(%s)\n", type);
+    int n_elements = is_type_array(type);
+
+    char *type_to_eval;
+    if (n_elements >= 1) { type_to_eval = get_arr_element_type(type); }
+    else { type_to_eval = type; }
+    
+>>>>>>> Stashed changes
     //Builtin type
     if (strcmp(type, "int32") == 0) { return 4; }
     if (strcmp(type, "int16") == 0) {return 2;}
@@ -1071,8 +1322,9 @@ int size_of_type(char *type)
     //User defined type
     else
     {
+        //printf("TRYING TO CALCULATE THE SIZE OF USER DEFINED TYPE: %s \n", type);
         //Calculate the size of all the fields of the object + fields from the parents
-        Object *o = lookup_object(gb_objectTable, type);
+        Object *o = lookup_object(gb_objectTable, type_to_eval);
         int size = 0;
         Object *curr_object = o;
         while (curr_object != NULL)
@@ -1083,40 +1335,193 @@ int size_of_type(char *type)
             }
             curr_object = curr_object->parent;
         }
+
+        //printf("RETURNING SIZE OF USER DEFINED TYPE (%s): %i \n", type, n_elements ? size * n_elements : size);
         
         return size;
     }
 }
 
+<<<<<<< Updated upstream
+=======
+
+// 23/11 - REFACTOR GET_BASE_TYPE ALTOGETHER. 3 DIFFERENT FUNCTIONS FOR:
+//         GETTING ARRAY'S ELEMENT'S TYPE:  type [size] ---> type
+//         GETTING FINAL POINTED TYPE FOR NESTED POINTERS: ptr<type> ---> type
+//         GETTING THE TYPE IF TYPE IS BUILTIN:  type ---> type 
+
+
+
+// Returns the final pointed type.
+// ptr ptr type ----> type
+char *get_final_pointed_type(char *src_type)
+{
+    char *copy = strdup(src_type);  // Work on a copy safely
+
+    char *token = strtok(copy, " ");  
+    char *last = NULL;
+
+    // Iterate tokens: ["ptr", "ptr", "uint8"]
+    while (token != NULL)
+    {
+        last = token;
+        token = strtok(NULL, " ");
+    }
+
+    if (last == NULL)
+    {
+        fprintf(stderr, "Malformed type: '%s'\n", src_type);
+        exit(1);
+    }
+
+    // Return final token (base type)
+    return strdup(last);
+}
+
+// Returns the element type for an array
+// type [size] --> type
+char *get_arr_element_type(char *src_type)
+{
+
+    if (!is_type_array(src_type))
+    {
+        fprintf(stderr, "Type '%s' is not an array type.\n", src_type);
+        exit(1);
+    }
+
+    size_t len = strlen(src_type);
+
+    // Find the start of the last "["
+    int bracket_start = -1;
+    for (int i = len - 1; i >= 0; i--)
+    {
+        if (src_type[i] == '[')
+        {
+            bracket_start = i;
+            break;
+        }
+    }
+
+    if (bracket_start == -1)
+    {
+        fprintf(stderr, "Malformed array type '%s'\n", src_type);
+        exit(1);
+    }
+
+    // Trim the trailing space before '['
+    int end = bracket_start - 1;
+    while (end >= 0 && (src_type[end] == ' ' || src_type[end] == '\t'))
+    {
+        end--;
+    }
+
+    if (end < 0)
+    {
+        fprintf(stderr, "Malformed type '%s'\n", src_type);
+        exit(1);
+    }
+
+    // Now copy everything up to end (inclusive)
+    char *result = malloc(end + 2); // +1 for '\0'
+    if (!result)
+    {
+        fprintf(stderr, "Out of memory.\n");
+        exit(1);
+    }
+
+    strncpy(result, src_type, end + 1);
+    result[end + 1] = '\0';
+
+    return result;
+}
+
+
+
+
+/*
+Returns type for built-in type
+Returns base of the arr for arr types (type[size])->(type), type can be ptr <Identifier> [size]
+Returns base of the ptr for ptr types (ptr ptr uint8)->(uint8)
+*/
+
+
+>>>>>>> Stashed changes
 char *get_base_type(char *type)
 {
+
+    printf("GETTING BASE TYPE FOR : %s\n", type);
+
     if (strcmp(type, "any") == 0)
     {
         fprintf(stderr, "Type: '%s', can't be used in a declaration or assignment as complete type. Use ptr <%s> instead. \n ", type, type);
         exit(1);
     }
+
     char *type_to_val = malloc(sizeof(char) * 50);
 
+<<<<<<< Updated upstream
     for (size_t i = strlen(type) - 1; i > 0; i--)
+=======
+
+    // If type is array, return base 
+    int size = is_type_array(type);    
+
+    printf("Checking if '%s' is type array: %i \n", type, size);
+
+
+    if (size)
     {
-        if (type[i] == ' ')
+        for (size_t i = 0; i < strlen(type); i++)
         {
-            for (size_t j = i; j < strlen(type); j++)
+            if (type[i] == ' ')
             {
-                type_to_val[j - i] = type[j + 1];
+                type_to_val = realloc(type_to_val, i);
+                type_to_val[i] = '\0';
+                return type_to_val;
             }
-            return type_to_val;
+
+            type_to_val[i] = type[i];
         }
     }
+
+    // If its pointer
+    if (is_type_ptr(type))
+>>>>>>> Stashed changes
+    {
+        for (size_t i = strlen(type) - 1; i > 0; i--)
+        {
+            if (type[i] == ' ')
+            {
+                for (size_t j = i; j < strlen(type); j++)
+                {
+                    type_to_val[j - i] = type[j + 1];
+                }
+                return type_to_val;
+            }
+        }
+    }
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
     //We didn't find any spaces, type must be base already
+    printf("RETURNING %s \n", type);
     return type;
 }
+
+
 
 char *get_pointed_type(char *pointed_type, int deref_levels)
 {
     if (strcmp(pointed_type, "ptr any") == 0)
     {
         fprintf(stderr, "Type: 'any', cannot be used as a standalone type, only allowed as pointed type: 'ptr<any>'");
+        exit(1);
+    }
+
+    if (!is_type_ptr(pointed_type))
+    {
+        fprintf(stderr, "Can't get the pointed type for a type that is not a pointer to start with: '%s'\n", pointed_type);
         exit(1);
     }
 
@@ -1143,17 +1548,40 @@ char *get_pointed_type(char *pointed_type, int deref_levels)
     }
 }
 
-char *get_type(ObjectTable *ot, EnumTable *et, char *type)
+
+char *ensure_type_exists(char *type)
 {
+<<<<<<< Updated upstream
     //Type can be built-in, user defined, or a pointer to either of those.
     //What matters is that the base type exists. In ptr ptr ptr int16, what matters is that int16 exists
     //So use that instead
 
     char *type_to_validate = get_base_type(type);
+=======
+    if (is_type_array(type))
+    {
+        char *element_type = get_arr_element_type(type);
+        ensure_type_exists(element_type);
+
+        return type;
+    }
+
+    if (is_type_ptr(type))
+    {
+        char *pointed_type = get_final_pointed_type(type);
+        ensure_type_exists(pointed_type);
+
+        return type;
+    }
+>>>>>>> Stashed changes
 
     //Check built-in types
     for (int i = 0; i < sizeof(types)/ sizeof(types[0]); i++)
     {
+<<<<<<< Updated upstream
+=======
+        if (strcmp(type, types[i]) == 0)
+>>>>>>> Stashed changes
         {
             if (strcmp(type_to_validate, types[i]) == 0)
             {
@@ -1163,18 +1591,18 @@ char *get_type(ObjectTable *ot, EnumTable *et, char *type)
     }
 
     //Check enums 
-    for (int i = 0; i < et->count; i++)
+    for (int i = 0; i < gb_enumTable->count; i++)
     {
-        if (strcmp(et->enums[i]->identifier, type_to_validate) == 0)
+        if (strcmp(gb_enumTable->enums[i]->identifier, type) == 0)
         {
             return type;
         }
     }
 
     //Check user defined types
-    for (int i = 0; i < ot->count; i++)
+    for (int i = 0; i < gb_objectTable->count; i++)
     {
-        if (strcmp(type_to_validate, ot->objects[i]->identifier) == 0)
+        if (strcmp(type, gb_objectTable->objects[i]->identifier) == 0)
         {
             return type;
         }
@@ -1187,13 +1615,17 @@ char *get_type(ObjectTable *ot, EnumTable *et, char *type)
 }
 
 
-
 //Populate the tables and analyze whether expressions are valid
 Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_ft, SCRIPT_MODE script_mode)
 {
     if (program == NULL || program->node_type == NODE_NULL) { Value v = {.type = "void"}; return v; }
+<<<<<<< Updated upstream
     //printf("Analyzing node with type: ");
     //printf(" %i \n", program->node_type);
+=======
+    printf("Analyzing node with type: %s \n", astTypeToStr(program));
+    
+>>>>>>> Stashed changes
     switch (program->node_type)
     {
 
@@ -1254,12 +1686,17 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
                     s->identifier = program->extern_func_def_node.params[i]->immediateParam.param_name;
                     //printf("here!\n");
 
-                    s->type = get_type(gb_objectTable,gb_enumTable, program->extern_func_def_node.params[i]->immediateParam.type);
+                    s->type = ensure_type_exists(program->extern_func_def_node.params[i]->immediateParam.type);
                     s->scope = assign_symbol_scope(script_mode);
                     s->index = i;
+<<<<<<< Updated upstream
                     s->offset = (f->local_symbols->count == 0)? 0 : lookup_identifierByIndex(f->local_symbols, s->index - 1)->offset +
                                                           size_of_type(lookup_identifierByIndex(f->local_symbols, s->index - 1)->type);
                     s->offset = align_to(s->offset, size_of_type(s->type));
+=======
+                    s->param_index = i;
+                    
+>>>>>>> Stashed changes
 
                     s->declaration_ctx = get_current_context();
                     s->ctx_block_id = assign_ctx_block_id(script_mode);
@@ -1274,9 +1711,13 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
                 s->type = "callback";
                 s->scope = assign_symbol_scope(script_mode);
                 s->index = i;
+<<<<<<< Updated upstream
                 s->offset = (f->local_symbols->count == 0)? 0 : lookup_identifierByIndex(f->local_symbols, s->index - 1)->offset +
                                                           size_of_type(lookup_identifierByIndex(f->local_symbols, s->index - 1)->type);
                 s->offset = align_to(s->offset, size_of_type(s->type));
+=======
+                s->param_index = i;
+>>>>>>> Stashed changes
 
                 s->declaration_ctx = get_current_context();
                 s->ctx_block_id = assign_ctx_block_id(script_mode);
@@ -1318,6 +1759,8 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             //Increment scope, we are inside the function, push the context 
             push_context(CTX_FUNCTION);
 
+
+            printf("-------- CHECKING THE PARAMETERS IN F = %s \n", f->identifier);
             //First populate the function's local symbol table with the parameters and possible functions
             for (int i = 0; i < program->funcdef_node.params_count; i++)
             {
@@ -1328,17 +1771,34 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
                     s->identifier = program->funcdef_node.params[i]->immediateParam.param_name;
                     //printf("here!\n");
 
-                    s->type = get_type(gb_objectTable,gb_enumTable, program->funcdef_node.params[i]->immediateParam.type);
+                    s->type = ensure_type_exists(program->funcdef_node.params[i]->immediateParam.type);
+                    
+
                     s->scope = assign_symbol_scope(script_mode);
                     s->index = i;
+<<<<<<< Updated upstream
                     s->offset = (f->local_symbols->count == 0)? 0 : lookup_identifierByIndex(f->local_symbols, s->index - 1)->offset +
                                                           size_of_type(lookup_identifierByIndex(f->local_symbols, s->index - 1)->type);
                     s->offset = align_to(s->offset, size_of_type(s->type));
+=======
+                    s->param_index = i;
+>>>>>>> Stashed changes
 
                     s->declaration_ctx = get_current_context();
                     s->ctx_block_id = assign_ctx_block_id(script_mode);
                     s->fn_unique_id = -2;
                     add_symbol(f->local_symbols, s);
+
+
+                    if (s->size > 8)
+                    {
+                        fprintf(stderr, "In function: %s, parameter: %s, with type: %s, is bigger than 8 bytes. Consider passing a reference to it instead: ptr<%s>\n",
+                                f->identifier, s->identifier, s->type, s->type);
+                        exit(1);
+                    }   
+
+                    // 22/11: Later change to 16
+
                     continue;
                 }
 
@@ -1348,9 +1808,14 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
                 s->type = "callback";
                 s->scope = assign_symbol_scope(script_mode);
                 s->index = i;
+<<<<<<< Updated upstream
                 s->offset = (f->local_symbols->count == 0)? 0 : lookup_identifierByIndex(f->local_symbols, s->index - 1)->offset +
                                                           size_of_type(lookup_identifierByIndex(f->local_symbols, s->index - 1)->type);
                 s->offset = align_to(s->offset, size_of_type(s->type));
+=======
+                s->param_index = i;
+
+>>>>>>> Stashed changes
 
                 s->declaration_ctx = get_current_context();
                 s->ctx_block_id = assign_ctx_block_id(script_mode);
@@ -1475,6 +1940,7 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             counter->type = "uint8";
             counter->scope = assign_symbol_scope(script_mode);
             counter->index = current_st->count;
+            counter->param_index = -1;
 
             counter->offset = (current_st->count == 0)? 0 : lookup_identifierByIndex(current_st, counter->index - 1)->offset +
                                                       size_of_type(lookup_identifierByIndex(current_st, counter->index - 1)->type);
@@ -1558,10 +2024,14 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             cb->fn_param_types = program->cbassignment_node.param_types;
             cb->fn_param_count = f->param_count;
             cb->index = current_st->count;
+<<<<<<< Updated upstream
             cb->offset = (current_st->count == 0)? 0 : lookup_identifierByIndex(current_st, cb->index - 1)->offset +
                                                       size_of_type(lookup_identifierByIndex(current_st, cb->index - 1)->type);
             cb->offset = align_to(cb->offset, size_of_type(cb->type));
 
+=======
+            cb->param_index = -1;
+>>>>>>> Stashed changes
             cb->scope = assign_symbol_scope(script_mode);
 
             cb->declaration_ctx = get_current_context();
@@ -1586,7 +2056,18 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             Function *f = check_function(current_ft, context.current_scope,
                                           program->funccall_node.identifier, param_types, program->funccall_node.params_count);
             
+<<<<<<< Updated upstream
                         
+=======
+
+            // Check if it's a recursive call 
+            Function *current_function = get_CFS();
+            if (current_function == f)
+            {
+                f->is_recursive = 1;
+            }
+
+>>>>>>> Stashed changes
             //Populate the funccall params type for correct lookup when generating the bytecode
             program->funccall_node.params_type = param_types;
             if (f == NULL)
@@ -1639,7 +2120,7 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
                 //Analyze the parameter
                 param = analyze(program->funccall_node.params_expr[i], current_st, current_ft, script_mode);
                 //Get the expected parameter
-                s = lookup_identifierByIndex(f->local_symbols, i);
+                s = get_ParamAtIndex(f->local_symbols, i);
                 //Check whether the parameter is callback
                 if (param.is_callback)
                 {
@@ -1665,8 +2146,10 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             //Try normal function lookup
             Function *f = check_function(current_ft, context.current_scope,
                                           program->funccall_node.identifier, param_types, program->funccall_node.params_count);
-                       
-            //Populate the funccall params type for correct lookup when generating the bytecode
+            
+
+
+            //Populate the funccall params type for correct lookup when generating the code
             program->funccall_node.params_type = param_types;
 
 
@@ -1721,7 +2204,7 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
                 //Analyze the parameter
                 param = analyze(program->funccall_node.params_expr[i], current_st, current_ft, script_mode);
                 //Get the expected parameter
-                s = lookup_identifierByIndex(f->local_symbols, i);
+                s = get_ParamAtIndex(f->local_symbols, i);
                 //Check whether the parameter is callback
                 if (param.is_callback)
                 {
@@ -1737,6 +2220,7 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
 
         case NODE_OBJECT:
         {
+            printf("GOT IN HERE \n");
             //Create an object
             Object *o = malloc(sizeof(Object));
             o->identifier = program->object_node.identifier;
@@ -1758,6 +2242,8 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             {
                 analyze(program->object_node.declarations[i], o->local_symbols, current_ft, script_mode);
             }
+
+            printf("FINISHED \n");
             break;
         }
 
@@ -1827,16 +2313,67 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
 
         }
 
+<<<<<<< Updated upstream
+=======
+        case NODE_ARRAY_INIT:
+        {
+            char *last_type = NULL;
+            for (int i = 0; i < program->array_init_node.size; i++)
+            {
+                Value v = analyze(program->array_init_node.elements[i], current_st, current_ft, script_mode);   
+                if (last_type != NULL && strcmp(v.type, last_type) != 0)
+                {
+                    fprintf(stderr, "Type mixing in array initializer: Got '%s' and '%s' \n", last_type , v.type);
+                    exit(1);
+                }
+
+                last_type = v.type;
+            }
+            
+            char *return_type = malloc(sizeof(char) * 100); 
+            sprintf(return_type, "%s [%i]", last_type, program->array_init_node.size);
+            Value result = {.type = return_type};
+            return result;
+        }
+        
+        case NODE_SUBSCRIPT:
+        {
+
+            Value base = analyze(program->subscript_node.base, current_st, current_ft, script_mode);
+            Value index = analyze(program->subscript_node.index, current_st, current_ft, script_mode);
+
+            program->subscript_node.element_size = size_of_type(get_arr_element_type(base.type)); 
+            if (!is_type_int(index.type))
+            {
+                fprintf(stderr, "Src: %s . Array subscription in L=%i. Index is expected to be of type integer (signed or unsigned), but got: '%s'\n",
+                        tracker.current_src_file, program->subscript_node.line_number, index.type);
+                exit(1);
+            }
+
+
+            // We want to return the array element type
+            Value result = {.type = get_arr_element_type(base.type)};
+
+
+            return result;
+        }
+        
+>>>>>>> Stashed changes
         case NODE_ASSIGNMENT:
         {
             //Create a symbol
             Symbol *s = malloc(sizeof(Symbol ));
             s->identifier = program->assignment_node.identifier;
-            s->type = get_type(gb_objectTable,gb_enumTable, program->assignment_node.type);
+            s->type = ensure_type_exists(program->assignment_node.type);
             s->index = current_st->count;
+<<<<<<< Updated upstream
             s->offset = (current_st->count == 0)? 0 : lookup_identifierByIndex(current_st, s->index - 1)->offset +
                                                       size_of_type(lookup_identifierByIndex(current_st, s->index - 1)->type);
             s->offset = align_to(s->offset, size_of_type(s->type));
+=======
+            s->param_index = -1;
+
+>>>>>>> Stashed changes
             s->scope = assign_symbol_scope(script_mode);
             s->declaration_ctx = get_current_context();
             s->ctx_block_id = assign_ctx_block_id(script_mode);
@@ -1884,13 +2421,33 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
         case NODE_REASSIGNMENT:
         {
             //Get the symbol to reassign
+<<<<<<< Updated upstream
             Symbol *s = lookup_identifier(current_st, context.current_scope,  program->reassignment_node.identifier);
+=======
+            Value lvalue = analyze(program->reassignment_node.lvalue, current_st, current_ft, script_mode);
+
+
+
+            program->reassignment_node.type = lvalue.type;
+
+            // 23/11 - Dont get the base type (i think). Fucks with 
+            // ptr<Node [9 bytes]> p [reassign] -------------- even though the reassignment is 8 bytes, bc of pointer, getting the base type returns Node, which is 9
+            //program->reassignment_node.size = size_of_type(get_base_type(lvalue.type));
+
+            program->reassignment_node.size = size_of_type(lvalue.type);
+
+            printf("Reassingment size = %i \n", program->reassignment_node.size);
+>>>>>>> Stashed changes
             //Analyze the expression
             Value v = analyze(program->reassignment_node.expression,current_st, current_ft, script_mode);
 
             //printf("Comparing between %s and %s \n", s->type, v.type);
+<<<<<<< Updated upstream
 
             compare_types(s->identifier, s->type, v.type);
+=======
+            analyze_types_with_reassign_symbol(lvalue.type, rvalue.type, program->reassignment_node.op);
+>>>>>>> Stashed changes
 
             //Value to ret for statements with no return value
             Value ret = {.type = "void"};
@@ -1898,6 +2455,7 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             return ret;
         }
 
+<<<<<<< Updated upstream
         case NODE_INSTANCE_REASSIGNMENT:
         {
             //Get the object identifier
@@ -1960,10 +2518,65 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             Value ret = {.type = field->type};
             return ret;
         }
+=======
+        case NODE_FIELD_ACCESS:
+        {
+
+
+            Value base_type = analyze(program->field_access_node.base, current_st, current_ft, script_mode);
+            Object *o = lookup_object(gb_objectTable, base_type.type);
+
+            // Save the type (object identifier)
+            program->field_access_node.type = o->identifier;
+
+            // Get the field within the correct symbol table
+            Symbol *field = lookup_identifier(o->local_symbols, 1, program->field_access_node.field_name);
+            printf("Field accessed: %s, with type: %s\n", field->identifier, field->type);
+
+            Value ret = {.type = field->type};
+            return ret;
+        }
+
+
+        case NODE_PTR_FIELD_ACCESS:
+        {
+            Value base_type = analyze(program->field_access_node.base, current_st, current_ft, script_mode);
+
+            if ( !is_type_ptr(base_type.type))
+            {
+                fprintf(stderr, "Base must be of pointer size when performing a field access through pointer \n");
+                exit(1);
+            }
+
+            printf("###    NOW HERE \n");
+
+            //What do we want here?
+            //char *type = get_base_type(base_type.type);
+
+            char *type = base_type.type;
+
+            char *pointed_type = get_pointed_type(type, 1);
+
+            // Retrieve the object
+            Object *o = lookup_object(gb_objectTable, pointed_type);
+
+            // Save the ptr type to the node i guess
+            program->ptr_field_access_node.type = base_type.type;
+
+            // Get the field 
+
+            Symbol *field = lookup_identifier(o->local_symbols,1,program->ptr_field_access_node.field_name);
+
+            Value ret = {.type = field->type};
+            return ret;
+        }
+        
+>>>>>>> Stashed changes
 
         case NODE_IDENTIFIER:
         {
 
+            printf("ANALYZING IDENTIFIER \n");
             Symbol *s = lookup_identifier(current_st, context.current_scope, program->identifier_node.name);
             // Special case -----> No symbols in global scope, globals must be known at compile time 
             if (get_current_context() == CTX_NONE)
@@ -2026,12 +2639,19 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
                     program->unary_op_node.size_of_operand = size_of_type("char");
                     return result;
                 }
+                
+                // 23/11 - commented this, use the resolve_final_ptr_type() function, created for a reason ffs
 
                 //Else we have something like: ptr type. Everytime we dereference, we remove one "ptr" from the type
-                const char *space = strchr(value_to_deref.type, ' ');
-                char *deref_type = strdup(space + 1);
-                result.type = deref_type;
-                program->unary_op_node.size_of_operand = size_of_type(deref_type);
+                // const char *space = strchr(value_to_deref.type, ' ');
+                // char *deref_type = strdup(space + 1);
+                // result.type = deref_type;
+                // program->unary_op_node.size_of_operand = size_of_type(deref_type);
+
+                char *type_pointed_to = resolve_final_ptr_type(value_to_deref.type, 1);
+                program->unary_op_node.size_of_operand = size_of_type(type_pointed_to);
+                result.type = type_pointed_to;
+
                 return result;
             }
 
@@ -2053,6 +2673,31 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             return result;
         }
 
+        case NODE_STDALONE_POSTFIX_OP:
+        {
+            printf("program->stdalone_postfix_op_node.op = %s \n", program->stdalone_postfix_op_node.op);
+            Value operand = analyze(program->stdalone_postfix_op_node.left, current_st, current_ft, script_mode);
+
+
+            program->stdalone_postfix_op_node.type = operand.type;
+            program->stdalone_postfix_op_node.size_of_operand = size_of_type(operand.type);
+
+            Value result = {.type = "void"};
+            return result;
+
+        }
+        case NODE_POSTFIX_OP:
+        {
+
+            Value operand = analyze(program->postfix_op_node.left, current_st, current_ft, script_mode);
+
+            program->postfix_op_node.type = operand.type;
+            program->postfix_op_node.size_of_operand = size_of_type(operand.type);
+
+
+            return operand;
+        }   
+
         case NODE_STR:
         {
             Value str = {.type = "str"};
@@ -2065,8 +2710,9 @@ Value analyze(ASTNode *program, SymbolTable *current_st, FunctionTable *current_
             Symbol *s = malloc(sizeof(Symbol ));
             s->identifier = program->assignment_node.identifier;
 
-            s->type = get_type(gb_objectTable, gb_enumTable, program->assignment_node.type);
+            s->type = ensure_type_exists(program->assignment_node.type);
             s->index = current_st->count;
+            s->param_index = -1;
             //s->scope = (gb_symbolTable == current_st) ? 0 : 1;
             s->scope = assign_symbol_scope(script_mode);
             s->offset = (current_st->count == 0)? 0 : lookup_identifierByIndex(current_st, s->index - 1)->offset +

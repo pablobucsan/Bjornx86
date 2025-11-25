@@ -1,0 +1,19 @@
+#use "libraries/user_libs/bstdio.bjo"
+
+
+func void main()
+{
+    int16 x = 3;  // store at [rbp - 24]
+    int16 y = 6;  // store at [rbp - 22]
+
+    ptr<int16> px = &x;
+
+    // px points to x
+    print(*px);
+
+    px += 1;
+
+    // px points to x + 2
+    print(*px);   
+}
+

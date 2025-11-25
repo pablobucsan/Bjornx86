@@ -79,3 +79,21 @@ clean_libs:
 
 clean_output:
 	rm -rf $(OUTPUT_DIR)
+<<<<<<< Updated upstream
+=======
+
+
+
+
+
+
+
+
+
+#compiling  make SCRIPT=test.bjo OUTPUT_SCRIPT=test
+#running ./output/test
+
+#permission 
+# chmod +r Makefile
+# chmod +r *.bjo 2>/dev/null || true
+>>>>>>> Stashed changes

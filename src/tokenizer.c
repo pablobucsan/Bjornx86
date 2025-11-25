@@ -19,8 +19,14 @@ char *syscalls[] = {"SYSCALL_PRINT", "SYSCALL_BMALLOC", "SYSCALL_CATCH_1", "SYSC
 
 
 char char_operators[] = {'+', '-', '%', '*', '/', '<', '>', '&', '!'};
+<<<<<<< Updated upstream
 char char_symbols[] = {'(', ')', '{', '}', ';', ',', '.', '#'};
 char *str_operators[] = {"<=", ">=", "==", "&&", "||", "!="};
+=======
+char *str_operators[] = {"<=", ">=", "==", "&&", "||", "!=", "++", "--"};
+char char_symbols[] = {'(', ')', '{', '}', ';', ',', '.', '#','[',']'};
+char *str_symbols[] = {"->"};
+>>>>>>> Stashed changes
 char *reassign_symbols[5] = {"-=","+=","*=","/=","%="};
 
 
@@ -114,6 +120,20 @@ int is_symbol(char c)
             return 1;
         }
     }
+
+    return 0;
+}
+
+int is_multi_char_symbol(char *src)
+{
+    char buffer[3] = {src[0], src[1], '\0'};
+    for (int i = 0; i < sizeof(str_symbols) / sizeof(str_symbols[0]); i++)
+    {
+        if (strcmp(buffer, str_symbols[i]) == 0)
+        {
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -180,6 +200,13 @@ Token *read_multi_char_operator(char **src)
     char buffer[3] = {(*src)[0], (*src)[1], '\0'};
     (*src) += 2; // Move the pointer forward by 2 characters
     return create_token(TOKEN_OPERATOR, buffer);
+}
+
+Token *read_multi_char_symbol(char **src)
+{
+    char buffer[3] = {(*src)[0], (*src)[1], '\0'};
+    (*src) += 2; // Move the pointer forward by 2 characters
+    return create_token(TOKEN_SYMBOL, buffer);
 }
 
 Token *read_reassign_symbol(char **src)
@@ -350,6 +377,7 @@ Token **tokenize(char *src)
         else if (*src == '=' && *(src + 1) != '=') { tokens[size++] = create_token(TOKEN_ASSIGN, "="); src++; }
         else if (is_reassign_symbol(src)) { tokens[size++] = read_reassign_symbol(&src); }
         else if (is_multi_char_operator(src)) { tokens[size++] = read_multi_char_operator(&src); }
+        else if (is_multi_char_symbol(src)) { tokens[size++] = read_multi_char_symbol(&src); }
         else if (is_operator(*src)){ tokens[size++] = read_operator(&src); }
         else if (is_symbol(*src)){ tokens[size++] = read_symbol(&src); }
         else

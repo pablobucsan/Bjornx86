@@ -38,6 +38,7 @@ typedef struct Token
 Token **tokenize(char *src);
 void print_tokens(Token **tokens);
 char *tokenTypeToStr(TokenType type);
+int is_reassign_symbol(char *src);
 
 
 #endif //ABC_TOKENIZER_H

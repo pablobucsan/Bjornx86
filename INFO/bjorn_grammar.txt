@@ -1,9 +1,31 @@
-< x >  ----> many x
 
 
-program := <statement>
+/* ============================================================= */
+/*                     Bjorn Language Grammar                    */
+/*                          (as of 2025 )                        */
+/* ============================================================= */
+
+program          ::= statement*
+
+statement        ::= declaration         ";"
+                  | assignment           ";"
+                  | reassignment         ";"
+                  | standalone_func_call ";"
+                  | expression           ";"
+                  | if_statement         
+                  | while_loop           
+                  | for_loop             
+                  | foreach_loop         
+                  | func_def             
+                  | object_def           
+                  | enum_def             
+                  | use_directive        
+                  | callback_assignment  ";"
+                  | block
+                  | ";"                                      // empty statement
 
 
+<<<<<<< Updated upstream
 statement           := assignment | reassignment | ptrReassignment | fieldReassignment |declaration | emptyStmt | whileLoop | forLoop | funcDef
                                   | objectDef    | ifStatement       | ptrFieldReassignment   | system_call
                                   | useDirective | callbackAssignment  | stdAloneFuncCall
@@ -22,31 +44,134 @@ expression              := < terms operator term > | < expression >
 term                    := < unit operator unit  >
 unit                    := identifier | identifier "." identifier | number | char | str | funcCall | "(" expression ")" 
                                       | typeCast | sizeCalc
+=======
+block            ::= "{" statement* "}"
 
-callbackAssignment      := "callback" identifier = identifier "( <type "," > )"
-sizeCalc                := "sizeof" "(" expression | type ")"
-typeCast                := (type) expression
-funcCall                := identifier + "(" <expression> ","  ")"
-system_call             := "SYSCALL_PRINT" ( identifier | number | str | char | bool);
-stdAloneFuncCall        := funcCall
+use_directive    ::= "#" "use" string_literal
 
-ifStatement             := "if" "(" expression ")" "{" <statement> "}"
-whileLoop               := "while" "(" expression ")" "{" <statement> "}"
-forLoop                 := "for" "(" assignment ";" expression ";" reassignment ")" "{" <statement> "}"
-foreachLoop             := "foreach" "(" type "identifier" "in" expression "within" "(" expression "," expression ")" "{" <statement> "}" 
-funcDef                 := "func" type identifier "(" < (funcParam | type identifier) "," > ")" "{" <statement> "}"
-funcParam               := identifier "(" < (funcParam | type identifier) "," > ")" "=" ">" type
-objectDef               := "object" identifier ("inherits" identifier)? "{" <declaration> "}"
-enumDef                 := "enum" identifier "{" <declaration> "}"
+/* ────────────────────── Declarations, Assignment and Reassignments ────────────────────── */
+declaration      ::= simple_declaration
+                  | array_declaration
+>>>>>>> Stashed changes
 
+simple_declaration ::= type identifier ";"
+array_declaration  ::= type "[" number_literal "]" identifier ";"
+
+assignment       ::= array_declaration "=" array_initializer ";"     -- int32[10] x = [1,2,3,4,5,6,7,8,9,10];
+                    | type identifier "=" expression ";"              -- int32 x = 42;
+
+<<<<<<< Updated upstream
 identifier          := <[a..zA..Z]>  + "_"
 number              := identifier | <[0...9]>
 builtinType         := "void" | "int32" | "int16" | "int8" | "str" | "char" | "bool" | "void" | "ptr < "<" type ">" > "
 symbol              := "(" | ")" | "{" | "}" | ";" | "." 
 assign_sym          := "=" | "+=" | "-="
 operator            := "+" | "-" | "*" | "/" | ">" | "<" | "&" | "==" | "<=" | ">=" | "!" | "&&" | "||"
+=======
+array_initializer ::= "[" initializer_list? "]"
+initializer_list  ::= expression ("," expression)* ","?   -- trailing comma OK
+
+reassignment     ::= lvalue assign_op expression ";"
+assign_op        ::= "=" | "+=" | "-=" | "*=" | "/="
+>>>>>>> Stashed changes
 
 
 
+/* ────────────────────── Types & Objects ─────────────────── */
+object_def       ::= "object" identifier ("inherits" identifier)? "{"
+                        declaration*
+                     "}" 
+
+enum_def         ::= "enum" identifier "{"
+                        (identifier ("=" number_literal)? ("," identifier ("=" number_literal)?)*)?
+                     "}"
+
+func_def         ::= "func" return_type identifier parameters block
+
+return_type      ::= (object | enum)? type
+
+parameters       ::= "(" (parameter ("," parameter)*)? ")"
+parameter        ::= type identifier
+                  |  identifier parameters "=>" type                    // closure param
+
+callback_assignment ::= "callback" identifier "=" identifier parameters ";"
 
 
+/* ────────────────────── Control Flow ────────────── */
+if_statement     ::= "if" "(" expression ")" block else_clause?
+else_clause      ::= "else" (block | if_statement)
+
+while_loop       ::= "while" "(" expression ")" block
+
+for_loop         ::= "for" "(" (assignment | simple_declaration)? ";" expression? ";" reassignment? ")" block
+
+foreach_loop     ::= "foreach" "(" type identifier "in" expression "within" "(" expression "," expression ")" ")" block
+
+/* ────────────────────── Expressions — precedence from low to high ────────────────────────*/
+expression ::= logical_or
+
+logical_or  ::= logical_and  ("||" logical_and )*
+logical_and ::= equality     ("&&" equality    )*
+equality    ::= relational   (("==" | "!=") relational)*
+relational  ::= additive     (("<" | "<=" | ">" | ">=") additive)*
+additive    ::= term         (("+" | "-") term        )*
+term        ::= factor       (("*" | "/" | "%") factor )*
+
+factor ::= ("!" | "-" | "&" | "*") factor
+        |  postfix
+
+postfix ::= primary
+         |  postfix "[" expression "]"
+         |  postfix "->" identifier
+         |  postfix "." identifier
+         |  postfix "(" arg_list? ")"
+         |  postfix "++"
+         |  postfix "--"
+
+primary ::= identifier
+         |  literal
+         |  "(" expression ")"
+         |  "(" type ")" expression      -- type cast
+         |  "sizeof" "(" (type | expression) ")"
+         |  func_call
+
+/* ────────────────────── Lvalues (left-hand side) ────────── */
+lvalue           ::= identifier
+                  | lvalue "[" expression "]"           // array indexing
+                  | lvalue "." identifier               // field access
+                  | lvalue "->" identifier              // pointer->field
+                  | "*" lvalue                          // dereference
+
+/* ────────────────────── Function calls ─────────────────── */
+func_call        ::= identifier "(" arg_list? ")"
+standalone_func_call ::= func_call
+
+arg_list         ::= expression ("," expression)*
+
+
+type_cast        ::= "(" type ")" expression
+size_of          ::= "sizeof" "(" (expression | type) ")"
+
+/* ────────────────────── Types ──────────────────────────── */
+type             ::= builtin_type
+                  | identifier                                 // user-defined type
+                  | type "[" number_literal "]"                // fixed-size array type
+                  | "ptr" "<" type ">"                         // pointer
+
+builtin_type     ::= "void" | "bool" | "char" | "str"
+                  | "int8"  | "int16"  | "int32" 
+                  | "uint8" | "uint16" | "uint32"
+
+/* ────────────────────── Literals ───────────────────────── */
+literal          ::= number_literal
+                  | string_literal
+                  | char_literal
+                  | "true" | "false" 
+
+number_literal   ::= decimal_literal 
+decimal_literal  ::= [0-9]+
+
+string_literal   ::= "\"" (~["\n\r\\] | "\\" .)* "\""
+char_literal     ::= "'" (~['\n\r\\] | "\\" .) "'"
+
+identifier       ::= [a-zA-Z_] [a-zA-Z0-9_]*
