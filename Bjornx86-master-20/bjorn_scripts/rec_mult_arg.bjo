@@ -1,0 +1,27 @@
+
+#use "libraries/user_libs/bstdio.bjo"
+
+
+func void recursivePrint(int8 a, int8 b, int8 c, int8 d, int8 e, int8 f, int8 g)
+{
+    print(g);
+    if (a > 1)
+    {
+        recursivePrint(a-1, b, c, d, e, f, g-1);
+    }
+}
+
+
+func void main()
+{
+    int8 a = 5;
+    int8 b = 1;
+    int8 c = 1;
+    int8 d = 1;
+    int8 e = 1;
+    int8 f = 1;
+    int8 g = 3;
+    recursivePrint(a,b,c,d,e,f,g);
+
+
+}

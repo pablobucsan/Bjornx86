@@ -1,0 +1,14 @@
+
+#use "libraries/user_libs/bstdio.bjo"
+
+func void main()
+{
+
+    uint32 fd = open("file_testing/open_test.txt", O_CREATE | O_RDWR | O_APPEND, USER_WRITE);
+
+    write(fd, "HAAA", 3);
+
+    print(fd);
+
+    close(fd);
+}

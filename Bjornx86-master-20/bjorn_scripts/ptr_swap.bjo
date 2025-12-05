@@ -1,0 +1,30 @@
+#use "libraries/user_libs/bstdio.bjo"
+
+
+
+object A
+{
+    uint8 field;
+};
+
+func ptr<A> swap(ptr<A> a, ptr<A> b)
+{
+    return b;
+}
+
+
+func void main()
+{
+    A dummy;
+    dummy.field = 10;
+    A bob;
+    bob.field = 20;
+    ptr<A> pdummy = &dummy;
+    ptr<A> pbob = &bob;
+    print(pdummy->field);
+
+    pdummy = swap(pdummy, pbob);
+
+    print(pdummy->field);
+}
+
