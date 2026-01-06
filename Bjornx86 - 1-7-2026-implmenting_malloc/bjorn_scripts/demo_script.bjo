@@ -1,0 +1,64 @@
+
+#use "libraries/user_libs/bstdio.bjo"
+#use "libraries/user_libs/bstdlib.bjo"
+
+object Node
+{
+    uint32 data;
+    ptr<Node> next;
+}
+
+
+func void demo1()
+{
+    func uint32 sum(ptr<Node> head)
+    {
+        if (head == null) { return 0; }
+        return head->data + sum(head->next);
+    }
+
+    // second node
+    Node second; second.data = 20; 
+    // head 
+    Node head; head.data = 10; head.next = &second;
+
+    print("The sum of the linked list is");
+    print(sum(&head));
+}
+
+func void demo2()
+{
+    uint32[5] arr = [1,2,3,4,5];
+
+    uint32 sum = 0;
+
+    foreach(uint32 element in arr within (0,5))
+    {
+        sum += element;
+    }
+
+    print("The sum of the array is");
+    print(sum);
+
+}
+
+func void demo3()
+{
+    func uint32 fib(uint8 n)
+    {
+        if (n <= 1) { return n; }
+        return fib(n - 1) + fib(n - 2);
+    }
+
+    uint32 x = fib(40);
+    print("Fib result is");
+    print(x);
+}
+
+
+func void main()
+{
+    //demo1();
+    //demo2();
+    demo3();
+}

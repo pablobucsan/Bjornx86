@@ -1,0 +1,48 @@
+
+
+1.    what happens when we do:
+
+x = y;
+
+and x and y are bigger than 8 bytes  (if their size is in [9,16] use two registers, if bigger than 16 then the solution we have already works) XMM registers
+
+
+
+
+
+39. change malloc to an arena implementation so no more random seg faults when running the compiler over and over again without changing a thing 
+
+
+40. implement printf 
+    dont sort the function table of functions with multiple variables, so we can point to the variables with a pointer and known size etc
+
+
+45. Have nodes use the correct register size for their types and truncate based on expected.
+    Otherwise, uint16 variables for example may only be loaded their 8 lower bits through AL and then the math operation 
+    is fucked. this matters for example when we know that a variable that is result of an expression with bigger size variables cannot 
+    exceed a certain value. for example:
+
+    uint8 y = (x_[16 bytes] >> 3) & 0xF;
+
+    y is at most 15 since we are masking with that, so its 8 bytes. however when loading x with AL and shifting it 3 bits, we are shifting 
+    x's lower 8 bits instead of the whole thing. issue!
+
+
+
+51. track all the allocated Operands and free them when exiting statement nodes 
+
+
+53. Array passing as parameters and all that. 
+in C:
+void foo(int arr[])
+{
+    printf("AAAA\n");
+}
+
+int main() {
+    int x = 3;
+    foo(&x);   // prints AAAA --> so its get called
+    return 0;
+}
+
+Also, we could allow for uint8[] x = [1,2,...]; and have the compiler just count

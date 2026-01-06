@@ -1,0 +1,11 @@
+#use "libraries/user_libs/bstdio.bjo"
+#use "libraries/user_libs/bstdlib.bjo"
+
+
+
+func void main(uint64 argc, ptr<ptr<char>> argv)
+{
+    ptr<void> p = malloc(sizeof(uint8));
+    ptr<void> p2 = malloc(sizeof(uint8));
+
+}

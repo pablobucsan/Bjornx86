@@ -1,0 +1,16 @@
+
+#use "libraries/user_libs/bstdio.bjo"
+
+func uint32 fib(uint8 n)
+{
+    if (n == 1) { return 1; }
+    if (n == 0) { return 0; }
+
+    return fib(n - 1) + fib(n - 2);
+}
+
+func void main()
+{
+    uint32 x = fib(10);
+    print(x);
+}

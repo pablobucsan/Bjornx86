@@ -1,0 +1,64 @@
+
+
+#use "bstdio.bjo"
+// null pointer
+// points to address 0 -> invalid address
+ptr<void> null = (ptr<void>)0;
+
+
+// Memory protection flag bits, choose or or-ed together
+
+uint64 PROT_NONE = 0;   // no permissions
+uint64 PROT_READ = 1;   // pages can be read
+uint64 PROT_WRITE = 2;  // pages can be written
+uint64 PROT_EXEC = 4;   // pages can be executed
+
+// Sharing type for the memory block, choose one
+uint64 MAP_SHARED = 1;  // share changes
+uint64 MAP_PRIVATE = 2; // changes are private
+uint64 MAP_ANONYMOUS = 0x20; // allocated from memory
+
+
+// Allocates 4096B (4KB) of memory with the specified protection and flags
+// If flag contains ANONYMOUS, then the fd must be -1 (no file)
+extern func ptr<void> mmap(ptr<void> addr, uint64 len, uint64 prot, uint64 flags , uint64 fd, uint64 off);
+
+object ArenaFreeBlock__{
+    ptr<void> p_init;
+    ptr<void> p_nextBlock;
+    uint64 totalBlockSize;
+}
+
+bool __arena_init = false;
+ptr<ArenaFreeBlock__> __arenaHead;
+
+func void displayBlock(ptr<ArenaFreeBlock__> p_block)
+{
+    print("Block starts at: ");
+    print(p_block->p_init);
+    print("\nWith total size of: ");
+    print(p_block->totalBlockSize);
+    putc('\n');
+}
+
+func void __initArena(){
+    __arenaHead = mmap(null, sizeof(ArenaFreeBlock__), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, (uint64)-1, (uint64)0);  // __arena points to a block of 4KB memory
+    __arena_init = true;
+    print("Arena has been initialized\n");
+
+    __arenaHead->p_init = (ptr<void>)__arenaHead;
+    __arenaHead->p_nextBlock = null;
+    __arenaHead->totalBlockSize = sizeof(ArenaFreeBlock__);
+
+    displayBlock(__arenaHead);
+
+}
+
+func ptr<void> malloc(uint64 size){
+    if (__arena_init == false){
+        __initArena();
+    }
+
+
+    return null;
+}

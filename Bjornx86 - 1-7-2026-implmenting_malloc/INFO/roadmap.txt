@@ -1,0 +1,21 @@
+Source Code
+    |
+    v
+Tokenizer (Lexer) -> Tokens
+    |
+    v
+Parser -> AST
+    |
+    v
+Semantic Analyzer -> Annotated AST (with symbol/function tables)
+    |
+    v
+Bytecode Generator -> Intermediate Bytecode
+    |
+    v
+Binary Generator -> Binary Bytecode
+    |
+    v
+Virtual Machine (VM) -> Execution
+
+

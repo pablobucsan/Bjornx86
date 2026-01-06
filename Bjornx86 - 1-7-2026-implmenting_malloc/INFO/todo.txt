@@ -1,0 +1,436 @@
+
+///// TODO:
+
+17. abide by system v abi compliance by only ensuring node_func_call only pushes-pops caller-saved registers and
+    node_func_def pushes-pops callee_saved registers. As of now, node_func_call pushes-pops without taking that into consideration. 
+    Moreover, passing struct objects as arguments by value forces the caller to make a full copy of the object onto its own stack frame 
+    and then the callee as well makes a copy of it. Extremely inefficient so im gonna force pass by pointer but in the future 
+    we can explore add a decorator to functions like (@force_svabi) to ensure we do make the copy and have interoperability with C and blah blah 
+
+
+
+
+
+29. Refactor the builder so its cleaner
+
+35. call sys_write() in big chunks of buffers, writing 1 char costs the same as writing 4096, so might as well
+    thats kinda the idea of printf() i think, allocate a buffer big enough and when encountering %i write the number there instead etc etc 
+
+
+36. variable amount of arguments for printf() function..?
+
+
+
+
+///// DONE 
+1. use the register that best fits the size of the variable. Risk of truncation issues otherwise
+
+3. Constant folding
+
+
+2. generate all global stuff in the first pass. after that, do a jmp .main, which is a label indicating the main() function.
+   we can safely have all the other labels/functions then over there. i think.
+
+4. Expect-Match approach register type and size. Within function calls we expect the register to be FPR and match the size of the parameter.
+   Within assignments we expect the register to be GPR and match the size of the assignment. 
+
+5. 16-byte align the stack for System V ABI compliance. weight (locals in a function) + 8 (push rbp) = 16 * m, where m natural >= 1, best case scenario 
+   when weight + 8 is already a multiple of 16, no overallocation. worst case scenario when weight + 8 = 16 * m - 1, for a given m; then we have 15 bytes    of overallocation
+
+
+7. How to name labels for overloaded functions? 
+   -> Name labels with function name plus parameters
+
+
+6. Modify compiler for assembly defined functions, like print().
+   -> Extern function ast node 
+
+
+9. lvalue (pain) 
+
+
+11. change stack pointer management to standard approach 
+   -> stack pointer begins at the lowest address 
+
+12. System for entering-exiting nodes in a way that we push the correct context, working context, and free registers
+
+
+15. print(func_call()) doesnt work
+   -> Ensure all parameters are stored in FPR registers before calling
+
+
+16. recursive functions that return operations between same function calls dont work.
+
+func uint32 fib(uint8 count)
+{
+    if (count <= 1) { return 1; }
+
+    return fib(count - 1) + fib(count - 2);
+}
+
+Issue: 
+
+end_.if_stmt_1:
+    ; Return node
+    ; Preparing to call function fib()
+    mov dil, [rbp - 8]
+    mov sil, 1
+    sub dil , sil
+    call _fib_u8
+    ;Ended func call node
+    mov ebx, eax                 -----------------> ebx stores the last fib() result
+    ; Preparing to call function fib()
+    mov dil, [rbp - 8]
+    mov sil, 2
+    sub dil , sil
+    call _fib_u8                  -----------------> we call fib again -------> ebx stores this last fib() result, last one is lost
+    ;Ended func call node
+    add ebx, eax
+    ;Ensure return is in rax
+    mov eax, ebx
+    jmp .ret_from_fib_u8
+
+
+Solution: push - pop the register holding the total result so its saved across calls
+
+ case NODE_FUNC_CALL:
+{
+
+    enter_node(program);
+    // Get the function we are calling 
+    Function *f = lookup_function(current_ft, bt_context.current_scope, 
+                                    program->funccall_node.identifier, program->funccall_node.params_type, program->funccall_node.params_count);
+
+    fprintf(asm_file, "    ; Preparing to call function %s()\n", f->identifier);
+
+    // Save caller-saved registers, push
+    // Check if any is being used
+    int count;
+    Register **used_registers = getBusyGPRs(&count);
+
+    if (used_registers != NULL)
+    {
+        fprintf(asm_file, "    ;Saving caller-saved registers\n");
+        for (int i = 0; i < count; i++)
+        {
+            // Dont push rax
+            // check for used_registers[i]->is_caller_saved
+            if (used_registers[i] != gpr->registers[0])
+            {
+                fprintf(asm_file, "    push %s \n", used_registers[i]->name);
+            }
+        }
+    }
+
+    
+
+    Operand par;
+    // Build the expressions for the parameters 
+    for (int i = 0; i < program->funccall_node.params_count; i++)
+    {
+        par = with_rvalue_context(asm_file, program->funccall_node.params_expr[i], FPR, 
+                            size_of_type(get_base_type(program->funccall_node.params_type[i])), current_st, current_ft);
+        
+        //Ensure the parameters are stored in the correct FPR registers, otherwise move it in
+        if (par.linkedToRegister->type != FPR)
+        {
+            Register *fpr_reg = getFPR(par.linkedToRegister->size);
+            fprintf(asm_file, "    ;Changing to FPR, par was stored in GPR: %s\n", par.linkedToRegister->name);
+            fprintf(asm_file, "    mov %s, %s\n", fpr_reg->name, par.linkedToRegister->name);
+        }
+    }
+    
+
+
+    
+
+    // call func_label
+    write_function_signature(asm_file, program);
+    
+    
+    // Retrieve them back, pop 
+    if (used_registers != NULL)
+    {
+        fprintf(asm_file, "    ;Retrieving caller-saved registers\n");
+        for (int i = count - 1; i >= 0; i--)
+        {
+            // Dont pop rax
+            // check for used_registers[i]->is_caller_saved
+
+            if (used_registers[i] != gpr->registers[0])
+            {
+                fprintf(asm_file, "    pop %s \n", used_registers[i]->name);
+            }
+        }
+    }
+
+    exit_node(program);
+
+    
+    Operand return_value;
+    
+    if (strcmp(f->rt_type, "void") != 0)
+    {
+        //Return value is always in RAX 
+        return_value.linkedToRegister = getTruncatedRegister(gpr->registers[0], size_of_type(get_base_type(f->rt_type)));
+        busyRegister(return_value.linkedToRegister);
+        fprintf(asm_file, "    ;Ended func call node\n");
+        return return_value;
+    }
+    
+    fprintf(asm_file, "    ;Ended func call node\n");
+
+    return_value.type = NONE;
+    
+    return return_value;
+}
+
+
+24. emit_instruction() function instead of fprintf-ing like crazy?
+
+
+19. Function's symbol table weight needs to account for the padding as well, every variable needs to be stored 
+    with an offset that's multiple of its weight (that's done already), so the memory used for the variables may 
+    actually be more than just the weight.
+
+    ->    
+    int pad = s->offset - (st->symbols[s->index - 1]->offset + size_of_type(st->symbols[s->index - 1]->type) - 1) - 1;
+    st->padding += pad;
+
+    CFF.stack_base_ptr = align_rsp(f->local_symbols->weight + f->local_symbols->padding);
+
+
+
+20. OPTIMIZATION: reorder variables so padding is minimum. Big variables should come first in the table and smaller ones after
+    Padding needs to be calculated as well.
+
+    void add_symbol(SymbolTable *st, Symbol *s)
+{
+
+    printf("Trying to add symbol: %s, st->count = %i \n", s->identifier, st->count);
+
+    //Dont allow duplicates
+    for (int i = 0; i < st->count; i++)
+    {
+        if (do_symbols_clash(st->symbols[i], s) == 1)
+        {
+            fprintf(stderr, "Redefinition of variable: %s, declared in context: %s \n", s->identifier, ctxToString(s->declaration_ctx));
+            exit(1);
+        }
+    }
+
+    //Resize if needed
+    if (st->count + 1 >= st->size) { resize_symbol_table(st, 2 * st->size); }
+
+
+    // If it's the smallest sized symbol, add at the end, otherwise it will be bigger than some element 
+    // and index of s will be changed within the for loop
+    int index_of_s = st->count;
+    //Order the table in correct order, big sizes first
+    for (int i = 0; i < st->count; i++)
+    {
+        if (size_of_type(s->type) >= size_of_type(st->symbols[i]->type))
+        {
+            index_of_s = i;
+            // Add one to all the consecutive symbols' index
+            // and shift them one down
+            for (int j = st->count; j > i; j--)
+            {
+                st->symbols[j] = st->symbols[j - 1];
+                st->symbols[j]->index++;
+
+            }
+
+            break;
+        }
+    }
+    
+    // Add the symbol in its correct spot within the table
+    st->count++;
+    s->index = index_of_s;
+    st->symbols[s->index] = s;
+
+    
+    // Finally, recompute the offsets for the symbols with the reorganized table
+    // only need to do so for the new inserted symbol and after
+    for (int i = s->index; i < st->count; i++)
+    {
+        st->symbols[i]->offset =  (i == 0) ? 0 : st->symbols[i - 1]->offset + size_of_type(st->symbols[i-1]->type);
+        // Align to an offset that is multiple of the variable size
+        st->symbols[i]->offset = align_to(st->symbols[i]->offset, size_of_type(st->symbols[i]->type));
+    }
+    
+
+    //print_symbolTable(st);
+
+    // Add the size of the symbol to the total weight of the table
+    st->weight += size_of_type(s->type);
+
+
+    // Keep track of the padding 
+    st->padding = 0;
+    for (int i = 1; i < st->count; i++)
+    {
+        st->padding += st->symbols[i]->offset - (st->symbols[i - 1]->offset + size_of_type(st->symbols[i - 1]->type));
+    }
+
+
+}
+
+18. imul r8 (register 8 bits), imm8 (immediate 8 bits), doesnt work 
+    So basically:     uint8 z = y * x; when both x and y are uint8 doesnt work because at the end we have:     imul al, cl
+
+
+Solution:
+                    // If expected size is 8 bits, for example: int8 x = 3 * 4, we could end up having
+                    // imul al,bl which is not valid x86 syntax
+
+                    if (left.linkedToRegister->size == 1 && right.linkedToRegister->size == 1)
+                    {
+                        int checkIfLeftInAL = strcmp(left.linkedToRegister->name, "al") == 0 ? 1 : 0;
+
+                        if (!checkIfLeftInAL) { fprintf(asm_file, "    mov al, %s \n", left.linkedToRegister->name); }
+                        
+                        fprintf(asm_file, "    imul %s \n", right.linkedToRegister->name);
+                        if (!checkIfLeftInAL) { fprintf(asm_file, "    mov %s, al \n", left.linkedToRegister->name); }
+
+
+
+21. more than 6 parameters for functions
+
+solution: Push them to the stack before calling the function, then, place them in the correct
+          stack frame position, calculating where they are in the stack based on rsp
+
+
+Issue: There seems to be overwritings of registers and weird stuff going on
+       Also:
+
+        // Load the parameters 
+            fprintf(asm_file,"   ;Loading parameters\n");
+            int params_to_it_until = min(6, f->param_count);
+            for (int i = 0; i < params_to_it_until; i++)
+            {
+                Symbol *param = lookup_identifierByIndex(f->local_symbols, i);
+                char *word = getWordForSize(size_of_type(get_base_type(param->type)));
+                // Expectate a FPR register with the size of the parameter 
+                expectRegister(FPR, size_of_type(get_base_type(param->type)));
+                // Match it 
+                fprintf(asm_file, "    mov %s [rbp - %i], %s \n", word,
+                        getStackBasePtr() - param->offset, matchExpectedRegister()->name);
+                clearExpectation();
+            }
+
+this is wrong because since we are re-ordering the symbol table, the first indexes nolonger correspond to the parameters. 
+
+Solution:
+Linear search the parameter on the symbol table, every symbol has a ->param_index field. The arguments whose position >6 are passed
+to the function in the stack and referenced based on rbp, arguments are at rbp + 16 (call and push rbp) or at rbp + 24 (call, push rbp, 16-aligning if odd number of parameters)
+
+22. do not sort the symbol table for objects, this breaks assumptions about offsets of fields (first declared field should come first but maybe it doesnt if we sort it)
+    keep it simple
+
+Solution: Only sort when they belong to a function
+
+25. Comparison between 8-bit variable and value loaded from memory causes operand-size mismatch
+Issue:
+When comparing an 8-bit local variable (e.g. loop counter i) with a value loaded from a struct field (a.count), the load from memory is emitted as mov r64, [mem] (64-bit), while the local lives in an 8-bit register (al, bl, etc.). This results in cmp al, rbx — illegal operand sizes — and assembler errors.
+This only surfaces when one operand comes from memory (field access, array element) and the other is a known small local/parameter.
+Solution:
+Before emitting any binary operation (<, >, ==, +, etc.), ensure both operands are in registers of the same size by demoting the larger one to match the smaller one:
+
+if (left.linkedToRegister->size != right.linkedToRegister->size)
+{
+    int sub = 2;
+    while (left.linkedToRegister->size  > right.linkedToRegister->size)
+        left.linkedToRegister = left.linkedToRegister->subRegisters[sub--];
+    while (right.linkedToRegister->size > left.linkedToRegister->size)
+        right.linkedToRegister = right.linkedToRegister->subRegisters[sub--];
+}
+
+26. problems with register usage when calculating the index on node subscript. instead of multiplying by 
+    the base size of the array we were multiplying by the size big enough to hold the index data. changed it
+
+
+27.  
+
+
+
+8. increment and decrement (++ and --) and reassignments like x += y
+   solution: have expressions be statements (that allows x++;  but also 2 + 3; to be a valid statement)
+   problem: x++; uses registers and its a statement so be can clear the registers 
+            print(x++); here x++; should not be a statement, we cant clear the registers 
+   solution: implement a NODE_STDALONE_POSTFIX_OP to distinct between x++; and print(x++) statements
+
+
+31. traverse the ast to collect the strings. A separate function 
+
+32. ENUMS. ✅
+
+33. CASTING ✅
+
+34. nested functions. 
+    solution: emit first the inner functions, mark them as visited, and then emit the outer functions. 
+              had to change symbol table parenting. before: allowed for a function symbol table to have the outer function table as parent 
+                                                            this allowed for successful lookup of variables defined in the outer function, within the inner function 
+                                                    now: every function table has as parent the global symbol table
+
+
+
+38. implement elseif ✅. 
+
+41. better error system, analyze is done, focus on ast now. ✅
+    Solution: 
+            Enum of errors and an array of messages mapping ERROR_CODE to MSG. 
+            Based on the error we can pass some context to populate the msg. 
+            raise(CError cerror, char *first, char *second, char *third);
+
+43. have everything work with 2 registers ==> forces proper spilling .
+    have nodes that consume values in registers be the ones that collect the spilled registers 
+    and only collect the ones that the children nodes spilled 
+
+    case NODE_THAT_CONSUMES:
+    {
+        -Record before_potential_spilling_state;
+
+        -buildStart(children nodes)
+
+        -Consume the result 
+
+        -collect potential spilling until math before state
+    }
+
+    Solution: Everything works with 3 registers. two we cant with our current approach and its pointless since some operations like rep movsb require 
+              3 registers✅
+
+44. printing binary and hexadecimal✅
+
+46. add uint64 and int64 types ✅ 
+
+47. support numbers in hexadecimal representation ✅ 
+48. Added classes, inherticance between them with the "extends" keyword, overriding methods and polymorphism (instances call their method definition if they have one 
+    otherwise they fallback onto parent class)✅ 
+
+49. Proper handling of return node, must ensure the return is in a register matching the size of the function return type 
+    My god this bug was something... ✅
+    Lets say we have func uint32 foo(), and there is a code path that returns an immediate 3, then 
+    this would have been written to AL, but the upper bits (EAX is what we actually want to return) are garbage
+    from whatever operations from before. Sometimes it helps to debug in hexadecimal to catch these things.
+
+50. when collecting spilled registers, we cant pop regX if regX is pinned, must mov regNotPinned, regX and then pop regX ✅
+
+52. int8 y = -3 * 2;   -> not correctly parsed ✅ 
+    Solution: The unary operators shouldnt be parsed with a while because they are right associate and non repeating, changed that to an if().
+    Also, allowed parseUnit to catch unary operations itself.
+
+
+========================================================
+/////CONSIDERATIONS
+1. Objects definitions inside functions ===> Global objects
+2. Only allow declarations/assignments in global scope?
+5. Function overload sensitive to differences between different types of int (maybe that's good?)
+7. sizeof(type) needs "object" keyword if calculating the size of an Object
+8. Immediate positive numbers are assumed to be "uintX", programmer's responsability. 
+9. Variable name "__foreach_counterX" reserved for inner counter in foreach loop.
+10. At least 3 gpr registers needed to work.
+
+        

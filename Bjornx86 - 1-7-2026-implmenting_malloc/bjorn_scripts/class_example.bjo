@@ -1,0 +1,47 @@
+
+
+
+#use "libraries/user_libs/bstdio.bjo"
+
+class A
+{
+    uint8 y;
+    uint8 x;
+
+    func void display()
+    {
+        print("Printing from A\n");
+    }
+}
+
+
+class B extends A
+{
+
+    func void init(uint8 x, uint8 y)
+    {
+        this->x = x;
+        this->y = y;
+    }
+
+}
+
+class C extends B 
+{
+    
+}
+
+func void main()
+{
+    A a;
+
+    a.display();
+
+    B b;
+
+    b.display();
+
+    C c; 
+
+    c.display();
+}

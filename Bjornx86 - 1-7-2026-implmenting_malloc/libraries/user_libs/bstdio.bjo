@@ -1,0 +1,372 @@
+
+
+
+///////////// OPEN FLAGS (NOT ALL OF THEM)
+uint32 O_RDONLY = 0;           // we can only read
+uint32 O_WRONLY = 1;           // we can only write
+uint32 O_RDWR = 2;             // we can read and write
+uint32 O_CREATE = 64;          // create file if it doesnt exist
+uint32 O_APPEND = 1024;        // always write at the end, no overwriting
+
+
+///////////// FILE MODES : ONLY MATTER WHEN CREATING A FILE --> DETERMINES WHO CAN READ/WRITE AND WHO CAN EXECUTE IT
+// USER PERMISSIONS
+uint32 USER_EXE = 64;          // only user can execute the file
+uint32 USER_WRITE = 128;       // only user can write to the file
+uint32 USER_READ = 256;        // only user can read the file
+
+// GROUP PERMISSIONS
+uint32 GROUP_EXE = 8;          // group can execute the file
+uint32 GROUP_WRITE = 16;       // group can write to the file
+uint32 GROUP_READ = 32;        // group can read the file
+
+
+// ------------------------------------  WRITING/PRINTING -------------------------------------------------
+
+// PRINTING A CHAR. NO NEW LINE TO STDOUT
+extern func void putc(char c);
+// PRITING A BUFFER OF SIZE COUNT TO FD NO NEW LINE
+extern func void write(uint32 fd, str buffer, uint32 count);
+
+
+// Function to print a char to stdout
+func void print(char c)
+{
+    putc(c);
+}
+
+// Function to print a string to stdout
+// 3/12 - Maybe change it to use write instead? But we dont have the size though
+func void print(str s)
+{
+    uint32 i = 0;
+
+    while (s[i] != '\0')
+    {
+        putc(s[i++]);  
+    }
+
+}
+
+func void print(uint8 x)
+{
+    // 3 digits max + '\0'
+    char[4] buffer;
+    int8 index = 2;
+    int8 start_index = 0;
+    bool not_seen_before = false;
+    while (index >= 0)
+    {
+        if (x < 10 && !not_seen_before) 
+        { 
+            start_index = index; 
+            not_seen_before = true; 
+        }
+
+        uint8 digit = x % 10;
+        buffer[index--] = digit + '0';
+        x = x / 10;
+    }
+
+    buffer[3] = '\0';
+
+    print(&buffer[start_index]);
+}
+
+func void print(int8 x)
+{
+    if (x < 0)
+    {
+        putc('-');
+        x = -x;
+    }
+
+    print((uint8)x);
+}
+
+func void print(uint16 x)
+{
+    // 5 digits max + '\0'
+    char[6] buffer;
+    int8 index = 4;
+    int8 start_index = 0;
+    bool not_seen_before = false;
+    while (index >= 0)
+    {
+        if (x < 10 && !not_seen_before) 
+        { 
+            start_index = index; 
+            not_seen_before = true; 
+        }
+
+        uint8 digit = (uint8)(x % 10);
+        buffer[index--] = digit + '0';
+        x = x / 10;
+    }
+
+    buffer[5] = '\0';
+
+    print(&buffer[start_index]);
+}
+
+func void print(int16 x)
+{
+    if (x < 0)
+    {
+        putc('-');
+        x = -x;
+    }
+
+    print((uint16)x);
+}
+
+func void print(uint32 x)
+{
+    // 10 digit max + '\0'
+    char[11] buffer;
+    int8 index = 9;
+    int8 start_index = 0;
+    bool not_seen_before = false;
+    while (index >= 0)
+    {
+        if (x < 10 && !not_seen_before){
+            start_index = index;
+            not_seen_before = true;
+        }
+        uint8 digit = (uint8)x % 10;
+        buffer[index--] = digit + '0';
+        x = x / 10;
+    }
+
+    buffer[10] = '\0';
+    print(&buffer[start_index]);
+}
+
+func void print(int32 x)
+{
+    if (x < 0){
+        putc('-');
+        x = -x;
+    }
+    print((uint32)x);
+}
+
+func void print(uint64 x)
+{
+    // 20 digits max + '\0'
+    char[21] buffer;
+    int8 index = 19;
+    int8 start_index = 0;
+    bool not_seen_before = false;
+    while (index >= 0)
+    {
+        if (x < 10 && !not_seen_before){
+            start_index = index;
+            not_seen_before = true;
+        }
+        uint8 digit = (uint8)x % 10;
+        buffer[index--] = digit + '0';
+        x = x / 10;
+    }
+
+    buffer[20] = '\0';
+    print(&buffer[start_index]);
+}
+
+func void print(int64 x)
+{
+    if (x < 0){
+        putc('-');
+        x = -x;
+    }
+    print((uint64)x);
+}
+
+
+// Printing binary
+//
+//
+func void printBinary(uint8 x)
+{
+    uint8 mask = 1;
+    print("0b");
+    for (int8 i = 7; i >= 0; i--)
+    {
+        print((x >> i) & mask);
+    }
+}
+
+func void printBinary(uint16 x)
+{
+    uint16 mask = 1;
+    print("0b");
+    for (int8 i = 15; i >= 0; i--)
+    {
+        print((x >> i) & mask);
+    }
+}
+
+func void printBinary(uint32 x)
+{
+    uint32 mask = 1;
+    print("0b");
+    for (int8 i = 31; i >= 0; i--)
+    {
+        print((x >> i) & mask);
+    }
+}
+
+func void printBinary(int8 x)
+{
+    printBinary((uint8)x);
+}
+
+func void printBinary(int16 x)
+{
+    printBinary((uint16)x);
+}
+
+func void printBinary(int32 x)
+{
+    printBinary((uint32)x);
+}
+
+
+// Printing hexadecimal
+//
+//
+func void printHex(uint8 x)
+{
+    uint8 mask = 15; //0b1111
+    print("0x");
+    for (int8 i = 1; i >= 0; i--)
+    {
+        uint8 value = (x >> 4 * i) & mask;
+        if (value > 9){
+            char c = 'A' + (value - 10);
+            print(c);
+        }
+        else {
+            print(value);
+        }
+    }
+}
+
+func void printHex(uint16 x)
+{
+    uint8 mask = 15; //0b1111
+    print("0x");
+    for (int8 i = 3; i >= 0; i--)
+    {
+        uint8 value = (uint8)(x >> 4 * i) & mask;
+        if (value > 9)
+        {
+            char c = 'A' + (value - 10);
+            print(c);
+        }
+        else 
+        {
+            print(value);
+        }
+    }
+}
+
+func void printHex(uint32 x)
+{
+    uint8 mask = 15; //0b1111
+    print("0x");
+    for (int8 i = 7; i >= 0; i--)
+    {
+        uint8 value = (uint8)(x >> 4 * i) & mask;
+        if (value > 9)
+        {
+            char c = 'A' + (value - 10);
+            print(c);
+        }
+        else 
+        {
+            print(value);
+        }
+    }
+}
+
+func void printHex(uint64 x)
+{
+    uint8 mask = 0xF; 
+    print("0x");
+    for (int8 i = 15; i >= 0; i--)
+    {
+        uint8 value = (uint8) ((x >> 4 * i) & mask);
+        if (value > 9)
+        {
+            char c = 'A' + (value - 10);
+            print(c);
+        }
+        else 
+        {
+            print(value);
+        }
+    }
+}
+
+func void printHex(int8 x)
+{
+    printHex((uint8)x);
+}
+
+func void printHex(int16 x)
+{
+    printHex((uint16)x);
+}
+
+func void printHex(int32 x)
+{
+    printHex((uint32)x);
+}
+
+func void printHex(int64 x)
+{
+    printHex((uint64)x);
+}
+
+func void print(ptr<void> p)
+{
+    uint64 x = (uint64)p;
+    printHex(x);
+}
+
+
+
+
+// ------------------------------------  END WRITING/PRINTING -------------------------------------------------
+
+
+// ------------------------------------ ACCESSING FILES -----------------------------------------------------
+
+// 3/12 finish up later
+object File 
+{
+    uint32 fd;
+    uint32 open_flags;
+    uint32 mode;
+    str filePath;
+}
+
+// Opens the file at the location specified with specified open flags and potentially file modes
+extern func uint32 open(str filePath, uint32 open_flags, uint32 mode);
+
+
+// Closes the file associated with the file descriptor.
+// Closing is important because other processes cant access them while still open, wastes memory
+// resource limits of file descriptors, often 1024
+extern func uint32 close(uint32 fd);
+
+
+
+
+
+
+
+
+
+// ------------------------------------ ACCESSING FILES -----------------------------------------------------
