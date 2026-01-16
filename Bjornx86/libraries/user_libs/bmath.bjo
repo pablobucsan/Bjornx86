@@ -1,0 +1,38 @@
+
+
+
+// As of now assume a is even
+func uint32 pow(uint32 a, uint32 b)
+{
+    if (b == 0) { return 1; }
+
+    uint32 n = 0;
+    uint32 a_base = a;
+    while (a_base % 2 == 0)
+    {
+        a_base = a_base >> 1;
+        n++;
+    }
+
+    // now, a = 2^n * a_base, with a_base odd 
+    // and a^b = 2 ^ (n*b) * a_base ^ b ---> a^b = (2 << n*b - 1) * a_base^d
+
+    // Compute a_base ^ d 
+    uint32 counter = b;
+    uint32 result = 1;
+    while (counter > 0)
+    {
+        result = result * a_base;
+        counter--;
+    }
+    print("n = ");
+    print(n);
+    print('\n');
+    print("result = ");
+    print(result);
+    print('\n');
+    return ((2 << (n * b - 1)) * result); 
+
+
+}
+

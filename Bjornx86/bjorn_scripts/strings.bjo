@@ -1,0 +1,42 @@
+#use "libraries/user_libs/bstdio.bjo"
+
+
+object A 
+{
+    uint8 field;
+    uint8 bob;
+}
+
+func void main()
+{
+    A a;
+    a.field = 10;
+    a.bob = 20;
+
+    A b;
+    b.field = 30;
+    b.bob = 40;
+
+
+    uint8[2] x_arr = [1,2];
+    A[2] a_arr = [a,b];
+    ptr<A>[2] p_arr = [&a, &b];
+
+
+    str[2] s_str = ["what is up","how are you doing im good and you thanks"];
+
+    str s = s_str[0];
+
+
+    print(x_arr[1]);
+    print(a_arr[1].bob);
+    print(p_arr[1]->bob);
+    print(s_str[1]);
+    print(s);
+    print(s_str[0][0]);
+
+    foreach(str s in s_str within (0,2))
+    {
+        print(s);
+    }
+}

@@ -1,0 +1,24 @@
+#use "libraries/user_libs/bstdio.bjo"
+
+
+func uint16 find_max(ptr<uint16> p, uint8 count){
+    uint16 max = 0;
+    for (uint8 i = 0; i < count; i++){
+        if (p[i] > max){
+            max = p[i];
+        }
+    }
+
+    return max;
+}
+
+func void main(){
+    uint16[4] x = [4,6,1,20];
+
+    ptr<uint16> px = &x[0];
+
+    uint16 y = find_max(px, 4);
+
+    print(y);
+    
+}

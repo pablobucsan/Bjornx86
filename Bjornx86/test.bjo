@@ -1,0 +1,6 @@
+#use "libraries/user_libs/bstdio.bjo"
+
+func void main(uint64 argc, ptr<str> argv){
+    str s = argv[1];
+    printf("x = %hhu, s = %s\n", 1, s);
+}

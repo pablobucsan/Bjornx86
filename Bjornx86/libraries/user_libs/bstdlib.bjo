@@ -1,0 +1,507 @@
+
+
+#use "bstdio.bjo"
+
+// null pointer
+// points to address 0 -> invalid address
+ptr<void> null = (ptr<void>)0;
+
+
+// Memory protection flag bits, choose or or-ed together
+
+uint64 PROT_NONE = 0;   // no permissions
+uint64 PROT_READ = 1;   // pages can be read
+uint64 PROT_WRITE = 2;  // pages can be written
+uint64 PROT_EXEC = 4;   // pages can be executed
+
+// Sharing type for the memory block, choose one
+uint64 MAP_SHARED = 1;  // share changes
+uint64 MAP_PRIVATE = 2; // changes are private
+uint64 MAP_ANONYMOUS = 0x20; // allocated from memory
+
+uint64 PAGE_SIZE = 0x1000; //4096
+
+
+uint64 __HEADER_SIZE = 32;   // First three fields of __FreeBlock comprehend the header
+uint64 __REQSIZE_OFFSET = 8;
+uint64 __TOTSIZE_OFFSET = 16;
+uint64 __MAGIC_OFFSET = 24;
+
+uint64 __MAGIC_ALLOCATED = 0xA110CBEEF;  // Magic number to tell whether its been allocated
+uint64 __MAGIC_FREED = 0xF3EEDBEEF;     // Magic number to tell whether its been freed
+uint64 __MAX_ALIGN_SIZE = 32;
+
+// Exits execution
+extern func void exit(int32 code);
+// Copies a block of memory
+extern func void memcpy(ptr<void> dst, ptr<void> src, uint64 size);
+
+// Allocates 4096B (4KB) of memory with the specified protection and flags
+// If flag contains ANONYMOUS, then the fd must be -1 (no file)
+extern func ptr<void> mmap(ptr<void> addr, uint64 len, uint64 prot, uint64 flags , uint64 fd, uint64 off);
+
+object __FreeBlock
+{
+    ptr<__FreeBlock> p_nextFreeBlock;
+    uint64 magic;
+    uint64 totalAllocatedBlockSize;
+    uint64 requestedSize;
+}
+
+object __Heap
+{
+    ptr<__Heap> p_nextHeap;
+    ptr<__FreeBlock> p_firstFreeBlock;
+    uint64 usableHeapMemoryLeft;
+    uint64 totalHeapMemory;
+}
+
+bool __heap_init = false;
+ptr<__Heap> __heap;
+
+func void __displayBlock(ptr<__FreeBlock> p_block)
+{
+    print("---- DISPLAYING BLOCK ---- \n");
+    print("Block header starts at: ");
+    print(p_block);
+    print("\nAnd memory to write at: ");
+    print(p_block + __HEADER_SIZE);
+    print("\nMemory allocated size: ");
+    print(p_block->totalAllocatedBlockSize);
+    print("\nPoints to the next free block starting at: ");
+    if (p_block->p_nextFreeBlock == null){
+        print("null\n");
+    }
+    else{
+        print(p_block->p_nextFreeBlock);
+        putc('\n');
+    }
+    putc('\n');
+}
+
+func uint64 __align_to(uint64 size, uint64 multiple_of)
+{
+    uint64 allocating_size = size + (multiple_of - 1) - (multiple_of + size - 1) % multiple_of;
+    return allocating_size;
+}
+
+func ptr<__FreeBlock> __createFreeBlock(ptr<void> header_start, uint64 allocated_size, ptr<__FreeBlock> next_free)
+{
+    ptr<__FreeBlock> p_freeBlock = header_start;
+    p_freeBlock->p_nextFreeBlock = next_free;
+    p_freeBlock->requestedSize = 0;
+    p_freeBlock->totalAllocatedBlockSize = allocated_size;
+
+    // print("Just created a free block:\n");
+    // __displayBlock(p_freeBlock);
+
+    return p_freeBlock;
+}
+
+func void __mergeFreeBlocks(ptr<__FreeBlock> free_block, ptr<__FreeBlock> coalescent_block)
+{
+    free_block->p_nextFreeBlock = coalescent_block->p_nextFreeBlock;
+    free_block->totalAllocatedBlockSize += coalescent_block->totalAllocatedBlockSize;
+}
+
+func void __tryMergeFreeBlocks(ptr<__FreeBlock> prev_block, ptr<__FreeBlock> free_block)
+{
+    // 1. Try to merge with next block
+    if (free_block->p_nextFreeBlock != null && free_block + free_block->totalAllocatedBlockSize == free_block->p_nextFreeBlock){
+        __mergeFreeBlocks(free_block, free_block->p_nextFreeBlock);
+    }
+
+    // 2. Try to merge with previous
+    if (prev_block != null && prev_block + prev_block->totalAllocatedBlockSize == free_block){
+        __mergeFreeBlocks(prev_block, free_block);
+    }
+}
+
+
+func void displayFreeBlocks()
+{
+    print("-------- DISPLAYING FREE BLOCKS -------- \n");
+    ptr<__Heap> p_currentHeap = __heap;
+    while (p_currentHeap != null){
+        ptr<__FreeBlock> p_currentFreeBlock = p_currentHeap->p_firstFreeBlock;
+
+        while (p_currentFreeBlock != null){
+            __displayBlock(p_currentFreeBlock);
+            p_currentFreeBlock = p_currentFreeBlock->p_nextFreeBlock;
+        }
+        p_currentHeap = p_currentHeap->p_nextHeap;
+    }
+
+    print("-------- FINISHED DISPLAYING FREE BLOCKS -------- \n");
+
+}
+
+func void __displayHeap(ptr<__Heap> heap)
+{
+    print("------- DISPLAYING HEAP ----- \n");
+    print("Starts at: ");
+    print(heap);
+    print("\nWith allocated size: ");
+    print(heap->totalHeapMemory);
+    putc('\n');
+    print("With first free block:\n");
+    __displayBlock(heap->p_firstFreeBlock);
+    print("Points to the next heap starting at: ");
+    if (heap->p_nextHeap == null){
+        print("null\n");
+    }
+    else{
+        print(heap->p_nextHeap);
+        putc('\n');
+    }
+    putc('\n');
+}
+func void displayHeaps()
+{
+    print(" |||||||||||||||||| DISPLAYING HEAPS |||||||||||||||||| \n");
+    ptr<__Heap> p_currentHeap = __heap;
+    while (p_currentHeap != null){
+        __displayHeap(p_currentHeap);
+        p_currentHeap = p_currentHeap->p_nextHeap;
+    }
+    print(" |||||||||||||||||| FINISHED DISPLAYING HEAPS |||||||||||||||||| \n");
+}
+func ptr<__Heap> __createNewHeap(uint64 size_guess, ptr<__Heap> next_heap)
+{
+    //print("$$$$ CREATING A HEAP $$$$ \n");
+
+    // The OS already aligns size_guess to a multiple of PAGE_SIZE
+    ptr<__Heap> new_heap = mmap(null, size_guess, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, (uint64)-1, (uint64)0);
+    new_heap->totalHeapMemory = __align_to(size_guess, PAGE_SIZE);
+    new_heap->usableHeapMemoryLeft = new_heap->totalHeapMemory - sizeof(__Heap);
+    new_heap->p_firstFreeBlock = __createFreeBlock(new_heap + sizeof(__Heap), new_heap->usableHeapMemoryLeft, null);
+    new_heap->p_nextHeap = next_heap;
+
+    //__displayHeap(new_heap);
+
+
+    return new_heap;
+}
+
+// TODO: Initital heap memory may be more than 4096
+func void __initHeap(uint64 size){
+
+    __heap = __createNewHeap(size, null);
+    __heap_init = true;
+
+
+}
+
+// WIP
+func ptr<void> malloc(uint64 requested_size){
+    // Align to a multiple of __MAX_ALIGN_SIZE so the pointer is aligned to the max alignment required by any built-in type (8 in this case for ptr<T>)
+    uint64 allocating_size = __align_to(requested_size + __HEADER_SIZE, __MAX_ALIGN_SIZE);
+
+    // Init the first heap if not done yet
+    if (__heap_init == false){
+        __initHeap(allocating_size);
+    }
+
+
+    // Get the heap owning the total space mapped containing enough memory for the requested_size
+    // Start with the first requested heap
+    ptr<__Heap> prev_heap = null;
+    ptr<__Heap> heap_to_use = __heap;
+
+    bool keep_looking = true;
+    while (heap_to_use != null && allocating_size > heap_to_use->usableHeapMemoryLeft){
+        prev_heap = heap_to_use;
+        heap_to_use = heap_to_use->p_nextHeap;
+        
+    }
+
+    // Couldnt find an already mapped heap big enough to hold the allocation
+    if (heap_to_use == null){
+        // Create a new heap
+        ptr<__Heap> new_heap = __createNewHeap(allocating_size, null);
+        // If we couldnt request more memory
+        if (new_heap == null){
+            return null;
+        }
+        //Link it on the chain
+        prev_heap->p_nextHeap = new_heap;
+        // We will use this new heap
+        heap_to_use = new_heap;
+    }
+
+    // From now on, we use heap_to_use
+    ptr<__FreeBlock> p_previousCurrentFreeBlock = null;
+    ptr<__FreeBlock> p_currentFreeBlock = heap_to_use->p_firstFreeBlock;
+
+    while (p_currentFreeBlock != null){
+        // print("MALLOC iteration. Starting with block at: ");
+        // print(p_currentFreeBlock);
+        // print(",current alloc size: ");
+        // print(p_currentFreeBlock->totalAllocatedBlockSize);
+        // print(", allocating size needed: ");
+        // print(allocating_size);
+        // putc('\n');
+
+        // If the block is just enough for the allocation, remove it from the chain and update its header info
+        if (p_currentFreeBlock->totalAllocatedBlockSize == allocating_size){
+
+            // Update header info
+            p_currentFreeBlock->magic = __MAGIC_ALLOCATED;
+            p_currentFreeBlock->requestedSize = requested_size;
+            
+            // Remove from chain
+            if (p_previousCurrentFreeBlock == null){
+                heap_to_use->p_firstFreeBlock = p_currentFreeBlock->p_nextFreeBlock;
+            }
+            else{
+                p_previousCurrentFreeBlock->p_nextFreeBlock = p_currentFreeBlock->p_nextFreeBlock;
+            }
+            // Decrement total usable memory left
+            heap_to_use->usableHeapMemoryLeft -= allocating_size;
+            // Return pointer
+            return p_currentFreeBlock + __HEADER_SIZE;
+        }
+
+        // If the block is bigger than the allocation needed, split it
+        elseif (p_currentFreeBlock->totalAllocatedBlockSize > allocating_size){
+            // Save the pointer to the writable memory
+            ptr<void> p_result = p_currentFreeBlock + __HEADER_SIZE;
+            uint64 total_alloc_size = p_currentFreeBlock->totalAllocatedBlockSize;
+
+            // Update the meta info 
+            p_currentFreeBlock->magic = __MAGIC_ALLOCATED;
+            p_currentFreeBlock->requestedSize = requested_size;
+            p_currentFreeBlock->totalAllocatedBlockSize = allocating_size;
+            // New block at a new position
+            p_currentFreeBlock = __createFreeBlock(p_currentFreeBlock + allocating_size, 
+                                                   total_alloc_size - allocating_size, p_currentFreeBlock->p_nextFreeBlock);
+
+            if (p_previousCurrentFreeBlock == null){
+                heap_to_use->p_firstFreeBlock = p_currentFreeBlock;
+            }
+            else{
+                p_previousCurrentFreeBlock->p_nextFreeBlock = p_currentFreeBlock;
+            }
+            // Decrement total usable memory left
+            heap_to_use->usableHeapMemoryLeft -= allocating_size;
+            return p_result;
+        }
+
+        // Move on to the next block
+        p_previousCurrentFreeBlock = p_currentFreeBlock;
+        p_currentFreeBlock = p_currentFreeBlock->p_nextFreeBlock;
+    }
+
+    return null;
+}
+
+// WIP
+func void free(ptr<void> p)
+{
+    if (p == null){
+        return;
+    }
+
+    uint64 requested_size = (uint64)*(p - __REQSIZE_OFFSET);
+    uint64 total_allocated_block_size = (uint64)*(p - __TOTSIZE_OFFSET);
+    uint64 magic = (uint64)*(p - __MAGIC_OFFSET);
+    if (magic == __MAGIC_FREED){
+        print("Pointer has already been freed: ");
+        print(p);
+        putc('\n');
+        exit((int32)1);
+    }
+
+    // Find what heap we are freeing from. If heap_start + heap_size < p, then p does not belong to that heap
+    // Start from the first one
+    ptr<__Heap> heap_to_use = __heap;
+    while ( !(heap_to_use < p && heap_to_use + heap_to_use->totalHeapMemory > p) ){
+        heap_to_use = heap_to_use->p_nextHeap;
+    }
+
+
+    // Find in what position of the chain this new free block would go
+    ptr<__FreeBlock> p_previousCurrentFreeBlock = null;
+    ptr<__FreeBlock> p_currentFreeBlock = heap_to_use->p_firstFreeBlock;
+
+    while (p_currentFreeBlock != null && p_currentFreeBlock + __HEADER_SIZE < p){
+        p_previousCurrentFreeBlock = p_currentFreeBlock;
+        p_currentFreeBlock = p_currentFreeBlock->p_nextFreeBlock;
+    }
+
+    // Insert the new free block at its correct position, the previous free block points to this new one, and this new one points to the next one in the chain
+    ptr<__FreeBlock> p_newFreedBlock = __createFreeBlock(p - __HEADER_SIZE, total_allocated_block_size, p_currentFreeBlock);
+    if (p_previousCurrentFreeBlock == null){
+        heap_to_use->p_firstFreeBlock = p_newFreedBlock;
+    }
+    else{
+        p_previousCurrentFreeBlock->p_nextFreeBlock = p_newFreedBlock;
+    }
+
+    // Potentially merge free blocks. 
+    // If the start of the new freed block header, plus the header size, plus the block size equals the start of the header of the next free block, merge them
+    __tryMergeFreeBlocks(p_previousCurrentFreeBlock, p_newFreedBlock);
+
+    ptr<__FreeBlock> pf = p - __HEADER_SIZE;
+    pf->magic = __MAGIC_FREED;
+
+    // Increment the heap usable memory
+    heap_to_use->usableHeapMemoryLeft += total_allocated_block_size;
+}
+
+func ptr<void> __reallocShrink(ptr<void> p, uint64 new_size)
+{
+    uint64 total_allocated_block_size = (uint64)*(p - __TOTSIZE_OFFSET);
+    uint64 writable_memory_size = total_allocated_block_size - __HEADER_SIZE;
+    uint64 new_total_alloc_size = __align_to(new_size + __HEADER_SIZE, __MAX_ALIGN_SIZE);
+
+
+    // Find what heap we are using. If heap_start + heap_size < p, then p does not belong to that heap
+    // Start from the first one
+    ptr<__Heap> heap_to_use = __heap;
+    while ( !(heap_to_use < p && heap_to_use + heap_to_use->totalHeapMemory > p) ){
+        heap_to_use = heap_to_use->p_nextHeap;
+    }
+
+    // If writable_memory_size - new_size is big enough to hold a header and at least 32 bytes of payload, we create a new free block
+    if (writable_memory_size - new_size >= __HEADER_SIZE + __MAX_ALIGN_SIZE){
+        // Find in what position of the chain this new free block would go
+        ptr<__FreeBlock> p_previousCurrentFreeBlock = null;
+        ptr<__FreeBlock> p_currentFreeBlock = heap_to_use->p_firstFreeBlock;
+        while (p_currentFreeBlock != null && p_currentFreeBlock + __HEADER_SIZE < p ){
+            p_previousCurrentFreeBlock = p_currentFreeBlock;
+            p_currentFreeBlock = p_currentFreeBlock->p_nextFreeBlock;
+        }
+        // Insert the new free block at its correct position, the previous free block points to this new one, and this new one points to the next one in the chain
+        ptr<__FreeBlock> p_newFreedBlock = __createFreeBlock(p + new_total_alloc_size - __HEADER_SIZE, 
+                                            total_allocated_block_size -  new_total_alloc_size , p_currentFreeBlock);
+
+        if (p_previousCurrentFreeBlock == null){
+            heap_to_use->p_firstFreeBlock = p_newFreedBlock;
+        }
+        else{
+            p_previousCurrentFreeBlock->p_nextFreeBlock = p_newFreedBlock;
+        }
+
+        // Potentially merge free blocks. 
+        // If the start of the new freed block header, plus the header size, plus the block size equals the start of the header of the next free block, merge them
+        __tryMergeFreeBlocks(p_previousCurrentFreeBlock, p_newFreedBlock);
+    }
+
+    //Update the meta information
+    ptr<uint64> p_req_size = p - __REQSIZE_OFFSET;
+    ptr<uint64> p_total_allocated_mem = p - __TOTSIZE_OFFSET;
+    *p_req_size = new_size;
+    *p_total_allocated_mem = new_total_alloc_size;
+    return p;
+}
+
+func ptr<void> __reallocExtendInPlace(ptr<void> p, uint64 new_size)
+{
+    uint64 total_allocated_block_size = (uint64)*(p - __TOTSIZE_OFFSET);
+    uint64 writable_memory_size = total_allocated_block_size - __HEADER_SIZE;
+    uint64 new_total_alloc_size = __align_to(new_size + __HEADER_SIZE, __MAX_ALIGN_SIZE);
+    
+    ptr<__FreeBlock> p_original = p - __HEADER_SIZE;
+    ptr<__FreeBlock> p_coalescent = p + writable_memory_size;
+
+
+    uint64 new_writable_memory = __align_to(new_size + __HEADER_SIZE, __MAX_ALIGN_SIZE) - __HEADER_SIZE;
+
+
+    // Find what heap we are using. If heap_start + heap_size < p, then p does not belong to that heap
+    // Start from the first one
+    ptr<__Heap> heap_to_use = __heap;
+    while ( !(heap_to_use < p && heap_to_use + heap_to_use->totalHeapMemory > p) ){
+        heap_to_use = heap_to_use->p_nextHeap;
+    }
+
+    // UNLINK p_coalescent FIRST
+    ptr<__FreeBlock> prev = null;
+    ptr<__FreeBlock> curr = heap_to_use->p_firstFreeBlock;
+    while (curr != null && curr != p_coalescent) {
+        prev = curr;
+        curr = curr->p_nextFreeBlock;
+    }
+
+    if (curr == null) {
+        print("ERROR: coalescent not found in free list\n");
+        exit((int32)1);
+    }
+    // Unlink
+    if (prev == null) {
+        heap_to_use->p_firstFreeBlock = p_coalescent->p_nextFreeBlock;
+    } 
+    else {
+        prev->p_nextFreeBlock = p_coalescent->p_nextFreeBlock;
+    }
+
+    uint64 old_total_allocated_original_size = p_original->totalAllocatedBlockSize;
+    uint64 excess = p_coalescent->totalAllocatedBlockSize - (new_writable_memory - writable_memory_size);
+
+    // Is there enough space to split a new free block
+    if (excess >= __HEADER_SIZE + __MAX_ALIGN_SIZE){
+        ptr<__FreeBlock> p_newFreeBlock = __createFreeBlock(p_original + new_total_alloc_size, 
+                                                            excess, 
+                                                            p_coalescent->p_nextFreeBlock);
+        // Insert the new block in the chain
+        if (prev == null) {
+            heap_to_use->p_firstFreeBlock = p_newFreeBlock;
+        } 
+        else {
+            prev->p_nextFreeBlock = p_newFreeBlock;
+        }
+    }
+
+    p_original->totalAllocatedBlockSize = new_total_alloc_size;
+    p_original->requestedSize = new_size;
+
+
+    // Return the same pointer
+    return p;
+}
+
+func ptr<void> realloc(ptr<void> p, uint64 new_size)
+{  
+    // Cannot reallocate a freed pointer
+    uint64 magic = (uint64)*(p - __MAGIC_OFFSET);
+    if (magic == __MAGIC_FREED){
+        print("ERROR: Can't realloc a freed pointer: ");
+        print(p);
+        putc('\n');
+        exit((int32)1);
+    }
+    // realloc(null, new_size) = malloc(new_size)
+    if (p == null){
+        return malloc(new_size);
+    }
+    // realloc(p, 0) = free(p);
+    if (new_size == 0){
+        free(p);
+        return null;
+    }
+
+
+    uint64 total_allocated_block_size = (uint64)*(p - __TOTSIZE_OFFSET);
+    uint64 writable_memory_size = total_allocated_block_size - __HEADER_SIZE;
+    uint64 new_total_alloc_size = __align_to(new_size + __HEADER_SIZE, __MAX_ALIGN_SIZE);
+    // Case 1: There is already enough memory allocated for the block to satisfy new size
+    if (new_size < writable_memory_size){
+        return __reallocShrink(p, new_size);
+    }
+
+    // Case 2: Check if next block is free and together with this one, big enough
+    ptr<__FreeBlock> p_original = p - __HEADER_SIZE;
+    ptr<__FreeBlock> p_coalescent = p + writable_memory_size;
+    if (p_coalescent->magic != __MAGIC_ALLOCATED && 
+        total_allocated_block_size + p_coalescent->totalAllocatedBlockSize >= new_total_alloc_size){
+        return __reallocExtendInPlace(p, new_size);
+    }
+
+    // Case 3: Fallback to malloc + copy + free
+    ptr<void> newp = malloc(new_size);
+    memcpy(newp, p, writable_memory_size);
+    free(p);
+
+    return newp;
+}

@@ -1,0 +1,12 @@
+
+
+
+uint64 __PUSH_DECR_RSP_BY = 8;
+
+extern func ptr<void> __get_rbp();
+extern func ptr<void> varg_start(uint64 count);
+
+func ptr<void> varg_next(ptr<void> curr)
+{
+    return curr - __PUSH_DECR_RSP_BY;
+}
