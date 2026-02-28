@@ -2,12 +2,711 @@
 
 
 
-// PRINTING TO STDOUT
-extern func void print(uint8 x);
-extern func void print(uint16 x);
-extern func void print(uint32 x);
-extern func void print(int8 x);
-extern func void print(int16 x);
-extern func void print(int32 x);
-extern func void print(char c);
-extern func void print(str s);
+#use "bvarargs.bjo"
+#use "bstdlib.bjo"
+#use "bstring.bjo"
+
+enum FileOpenFlags : uint16 
+{
+    // Basic access modes (Exactly one of these)
+    O_RDONLY = 0x0,   // Can only read
+    O_WRONLY = 0x1,   // Can only write
+    O_RDWR = 0x2,     // Can read and write
+
+    // Creation/ modification flags
+    O_CREATE = 0x40,  // Create if the file does not exist
+    O_TRUNC = 0x200,  // Truncate file to 0 length if it exists (for writing, basically overwrite)
+    O_APPEND = 0x400, // Appends to the file (no overwritting)
+
+    // Handy named combinations
+    READ = 0x0,                         // Read existing file
+    READ_UPDATE = 0x2,                  // Read + write existing file
+    WRITE = 0x1 | 0x40 | 0x200,         // Write, create if needed, truncate if exists 
+    READ_WRITE = 0x2 | 0x40 | 0x200,    // Read + write, create if needed, truncate if exists
+    APPEND = 0x1 | 0x40 | 0x400,        // Append, create if needed
+    READ_APPEND = 0x2 | 0x40 | 0x400,   // Read + append, create if needed (read starts at the beginning, writing appends)
+}
+
+enum FileMode : uint16 
+{
+    // User permissions
+    USER_READ = 0x100, 
+    USER_WRITE = 0x80,
+    USER_EXE = 0x40,
+
+    // Group permissions
+    GROUP_READ = 0x20,
+    GROUP_WRITE = 0x10,
+    GROUP_EXE = 0x8,
+
+    // Other (everyone else)
+    OTHER_READ = 0x4,
+    OTHER_WRITE = 0x2,
+    OTHER_EXE = 0x1,
+
+
+    // Handy named combinations
+    USER_RWX = 0x100 | 0x80 | 0x40,
+    GROUP_RWX = 0x20 | 0x10 | 0x8,
+    OTHER_RWX = 0x4 | 0x2 | 0x1,
+
+    // Mode644  = UserRead | UserWrite | GroupRead | OtherRead,
+    MODE644 = 0x100 | 0x80 | 0x20 | 0x4,
+    // Mode755 = UserRead | UserWrite | UserExe | GroupRead | GroupExe | OtherRead | OtherExe
+    MOD755 = 0x100 | 0x80 | 0x40 | 0x20 | 0x8 | 0x4 | 0x1,
+    // Mode666 = UserRead | UserWrite | GroupRead | GroupWrite | OtherRead | OtherWrite
+    MODE666 = 0x100 | 0x80 | 0x20 | 0x10 | 0x4 | 0x2,
+    // Mode777 = UserRWX | GroupRWX | OtherRWX
+    MODE777 = 0x100 | 0x80 | 0x40 | 0x20 | 0x10 | 0x8 | 0x4 | 0x2 | 0x1,
+}
+
+// END OF FILE
+int8 EOF = -1;
+
+// ------------------------------------ ACCESSING FILES -----------------------------------------------------
+
+object File 
+{
+    str filePath;       // copy of filepath
+    uint64 fpos;        // file position
+    int32 fd;          // file descriptor, int because it can be negative for error purposes
+    FileOpenFlags open_flags;  // open flags used to open the file
+    FileMode mode;        // mode used to open the file
+}
+
+
+extern ptr<File> STDOUT;
+
+
+// PRINTING A CHAR. NO NEW LINE TO FD 
+extern func void fputc(int32 fd, char c);
+
+// Opens the file at the location specified with specified open flags and potentially file modes
+extern func int32 open(str filePath, uint16 open_flags, uint16 mode);
+
+// Closes the file associated with the file descriptor.
+// Closing is important because other processes cant access them while still open, wastes memory
+// resource limits of file descriptors, often 1024
+extern func int32 close(int32 fd);
+
+// Reads "count" chars from a file and puts it into "buf"
+extern func uint32 read(int32 fd, ptr<char> buf, uint32 count);
+
+// PRINTING A CHAR. NO NEW LINE TO STDOUT
+extern func void putc(char c);
+
+// PRITING A BUFFER OF SIZE COUNT TO FD NO NEW LINE
+extern func void write(int32 fd, str buffer, uint32 count);
+
+// CREATING A DIRECTORY AT A FILEPATH RELATIVE TO CURRENT WORKING DIR
+extern func int32 mkdir(str pathname, uint16 mode);
+
+
+
+func ptr<File> fopen(str filePath, FileOpenFlags flags)
+{    
+
+    // Mode
+    FileMode mode = MODE666;
+    // printf("Flags= %hx  mode=%hx\n", open_flags, m);
+
+    // Open the file 
+    int32 fd = open(filePath, (uint16)flags, (uint16)mode);
+    // printf("Open returned fd = %i\n", fd);
+
+    if (fd < 0){
+        return null;
+    }
+
+    ptr<File> f = malloc(sizeof(File));
+    if (f == null){
+        close(fd);
+        return null;
+    }
+
+    f->fd = fd;
+    f->open_flags = flags;
+    f->mode = mode;
+    f->filePath = strdup(filePath);
+
+    return f;    
+}
+
+func uint32 freadBytes(ptr<File> f, ptr<char> buf, uint32 bytes)
+{
+    uint32 amount = read(f->fd, buf, bytes);
+    return amount;
+}
+
+func ptr<char> freadAll(ptr<File> f)
+{
+    // Initial chunk of 256 that will double if we run out of space
+    uint32 buf_size = 256;
+    bool keep_reading = true;
+    uint32 index = 0;
+    ptr<char> buf = malloc((uint64)buf_size);
+
+    while (keep_reading){
+        // Always have space for one more buf_size
+        if (index + buf_size >= buf_size * 2){
+            buf_size = buf_size * 2;
+            buf = realloc(buf, (uint64)buf_size);
+        }
+        uint32 bytes_read = freadBytes(f, &buf[index], buf_size - index);
+        if (bytes_read < buf_size - index){
+            keep_reading = false;
+        }
+        index += bytes_read;
+
+    }
+    buf = realloc(buf, (uint64)index + 1);
+
+    buf[index] = '\0';
+    return buf;  
+}
+
+func char fgetc(ptr<File> f)
+{
+    char result = 0;
+    uint32 amount = read(f->fd, &result, (uint32)1);
+    if (amount == 0){
+        return EOF;
+    }
+    return result;
+}
+
+func void fclose(ptr<File> f)
+{
+    close(f->fd);
+}
+
+func int32 makeDirectory(str pathname, FileMode mode)
+{
+    int32 result = mkdir(pathname, (uint16)mode);
+    return result;
+}
+
+
+// Function to print a char to file
+func void fprint(ptr<File> f, char c)
+{
+    fputc(f->fd, c);
+}
+
+func void fprint(ptr<File> f, str s)
+{
+    uint64 i = 0;
+    while (s[i] != '\0'){
+        fputc(f->fd, s[i++]);  
+    }
+
+}
+
+func void fprint(ptr<File> f, bool b)
+{
+    if (b){
+        fprint(f, "true");
+    }
+    else{
+        fprint(f, "false");
+    }
+}
+
+func void fprint(ptr<File> f, uint8 x)
+{
+    if (x == 0){
+        fputc(f->fd, '0');
+        return;
+    }
+    // 3 digits max + '\0'
+    char[4] buffer;
+    int8 index = 3;
+    buffer[index] = '\0';
+    while (x > 0){
+        index--;
+        buffer[index] = (char)(x % 10) + '0';
+        x = x / 10;
+    }
+    fprint(f, &buffer[index]);
+}
+
+func void fprint(ptr<File> f, int8 x)
+{
+    if (x < 0){
+        fputc(f->fd, '-');
+        x = -x;
+    }
+
+    fprint(f, (uint8)x);
+}
+
+func void fprint(ptr<File> f, uint16 x)
+{
+    if (x == 0){
+        fputc(f->fd, '0');
+        return;
+    }
+    // 5 digits max + '\0'
+    char[6] buffer;
+    int8 index = 5;
+    buffer[index] = '\0';
+
+    while (x > 0){
+        index--;
+        buffer[index] = (char)(x % 10) + '0';
+        x = x / 10;
+    }
+    fprint(f, &buffer[index]);
+}
+
+func void fprint(ptr<File> f, int16 x)
+{
+    if (x < 0)
+    {
+        fputc(f->fd, '-');
+        x = -x;
+    }
+
+    fprint(f, (uint16)x);
+}
+
+
+func void fprint(ptr<File> f, uint32 x)
+{
+    if (x == 0){
+        fputc(f->fd, '0');
+        return;
+    }
+    // 10 digit max + '\0'
+    char[11] buffer;
+    int8 index = 10;
+    buffer[index] = '\0';
+
+    while (x > 0){
+        index--;
+        buffer[index] = (char)(x % 10) + '0';
+        x = x / 10;
+    }
+    fprint(f, &buffer[index]);
+}
+
+func void fprint(ptr<File> f, int32 x)
+{
+    if (x < 0){
+        fputc(f->fd, '-');
+        x = -x;
+    }
+    fprint(f, (uint32)x);
+}
+
+
+func void fprint(ptr<File> f, uint64 x)
+{
+    if (x == 0) {
+        fputc(f->fd, '0');
+        return;
+    }
+
+    char[21] buffer;
+    int8 index = 20;
+    buffer[index] = '\0';  // null terminator at end
+    
+    while (x > 0) {
+        index--;
+        buffer[index] = (char)(x % 10) + '0';
+        x = x / 10;
+    }
+    fprint(f, &buffer[index]);
+}
+
+func void fprint(ptr<File> f, int64 x)
+{
+    if (x < 0){
+        fputc(f->fd, '-');
+        x = -x;
+    }
+    fprint(f, (uint64)x);
+}
+
+
+// Printing hexadecimal
+//
+//
+func void fprintHex(ptr<File> f, uint8 x)
+{
+    uint8 mask = 15; //0b1111
+    fprint(f, "0x");
+    for (int8 i = 1; i >= 0; i--)
+    {
+        uint8 value = (x >> 4 * i) & mask;
+        if (value > 9){
+            char c = 'A' + (value - 10);
+            fprint(f, c);
+        }
+        else {
+            fprint(f, value);
+        }
+    }
+}
+
+func void fprintHex(ptr<File> f, uint16 x)
+{
+    uint8 mask = 15; //0b1111
+    fprint(f, "0x");
+    for (int8 i = 3; i >= 0; i--){
+        uint8 value = (uint8)(x >> 4 * i) & mask;
+        if (value > 9){
+            char c = 'A' + (value - 10);
+            fprint(f, c);
+        }
+        else {
+            fprint(f, value);
+        }
+    }
+}
+
+func void fprintHex(ptr<File> f, uint32 x)
+{
+    uint8 mask = 15; //0b1111
+    fprint(f,"0x");
+    for (int8 i = 7; i >= 0; i--){
+        uint8 value = (uint8)(x >> 4 * i) & mask;
+        if (value > 9){
+            char c = 'A' + (value - 10);
+            fprint(f,c);
+        }
+        else {
+            fprint(f,value);
+        }
+    }
+}
+
+func void fprintHex(ptr<File> f, uint64 x)
+{
+    uint8 mask = 0xF; 
+    fprint(f, "0x");
+    for (int8 i = 15; i >= 0; i--){
+        uint8 value = (uint8) ((x >> 4 * i) & mask);
+        if (value > 9){
+            char c = 'A' + (value - 10);
+            fprint(f,c);
+        }
+        else {
+            fprint(f,value);
+        }
+    }
+}
+
+func void fprintHex(ptr<File> f, int8 x)
+{
+    fprintHex(f, (uint8)x);
+}
+
+func void fprintHex(ptr<File> f, int16 x)
+{
+    fprintHex(f, (uint16)x);
+}
+
+func void fprintHex(ptr<File> f, int32 x)
+{
+    fprintHex(f, (uint32)x);
+}
+
+func void fprintHex(ptr<File> f, int64 x)
+{
+    fprintHex(f, (uint64)x);
+}
+
+func void fprint(ptr<File> f, ptr<void> p)
+{
+    uint64 y = (uint64)p;
+    fprintHex(f, y);
+}
+
+
+func void fprintf(ptr<File> f, str s, varargs)
+{
+    uint64 varg_count = 0;
+    uint64 str_len = 0;
+    for (uint64 i = 0; s[i] != '\0'; i++){
+        if (s[i] == '%'){
+            varg_count++;
+        }
+        str_len++;
+    }
+
+    ptr<void> curr = varg_start(varg_count);
+    uint64 i = 0;
+    while (s[i] != '\0' && i < str_len){
+        if (s[i] == '%'){
+            i++;
+            // Case uint8,int8,uint16,int16
+            if (s[i] == 'h'){
+                i++;
+                // Case uint8,int8, hex 8 bits
+                if (s[i] == 'h'){
+                    i++;
+                    // Case uint8
+                    if (s[i] == 'u'){
+                        i++;
+                        fprint(f, *(ptr<uint8>)curr);
+                        curr = varg_next(curr);
+                    }
+                    // Case int8
+                    elseif (s[i] == 'i'){
+                        i++;
+                        fprint(f, *(ptr<int8>)curr);
+                        curr = varg_next(curr);
+                    }
+                    // Case hex
+                    elseif (s[i] == 'x'){
+                        i++;
+                        fprintHex(f, *(ptr<uint8>)curr);
+                        curr = varg_next(curr);
+                    }
+                }
+                // Case uint16 
+                elseif(s[i] == 'u'){
+                    i++;
+                    fprint(f, *(ptr<uint16>)curr);
+                    curr = varg_next(curr);
+                }
+                // Case int16
+                elseif(s[i] == 'i'){
+                    i++;
+                    fprint(f, *(ptr<int16>)curr);
+                    curr = varg_next(curr);
+                }
+                // Case hex 16 bits
+                elseif (s[i] == 'x'){
+                    i++;
+                    fprintHex(f, *(ptr<uint16>)curr);
+                    curr = varg_next(curr);
+                }
+            }
+
+            // Case uint32
+            elseif (s[i] == 'u'){
+                i++;
+                fprint(f, *(ptr<uint32>)curr);
+                curr = varg_next(curr);
+            }
+            // Case int32
+            elseif (s[i] == 'i'){
+                i++;
+                fprint(f, *(ptr<int32>)curr);
+                curr = varg_next(curr);
+            }
+            // Case hex 32 bits
+            elseif (s[i] == 'x'){
+                i++;
+                fprintHex(f, *(ptr<uint32>)curr);
+                curr = varg_next(curr);
+            }
+
+            // Case uint64, int64
+            elseif (s[i] == 'l'){
+                i++;
+                // Case uint64
+                if (s[i] == 'u'){
+                    i++;
+                    fprint(f, *(ptr<uint64>)curr);
+                    curr = varg_next(curr);
+                }
+                // Case int64
+                if (s[i] == 'i'){
+                    i++;
+                    fprint(f, *(ptr<int64>)curr);
+                    curr = varg_next(curr);
+                }
+                // Case hex 64 bits 
+                if (s[i] == 'x'){
+                    i++;
+                    fprintHex(f, *(ptr<uint64>)curr);
+                    curr = varg_next(curr);
+                }
+            }
+
+            // string
+            elseif (s[i] == 's'){
+                i++;
+                str st = *(ptr<str>)curr;
+                fprint(f, st);
+                curr = varg_next(curr);
+            }
+            // char
+            elseif (s[i] == 'c'){
+                i++;
+                fprint(f, *(ptr<char>)curr);
+                curr = varg_next(curr);
+            }
+            // boolean
+            elseif (s[i] == 'B'){
+                i++;
+                fprint(f, *(ptr<bool>)curr);
+                curr = varg_next(curr);
+            }
+            // pointer
+            elseif (s[i] == 'p'){
+                i++;
+                ptr<void> address = (ptr<void>)(*(ptr<uint64>)curr);
+                fprint(f, address);
+                curr = varg_next(curr);
+            }
+            // hex
+            elseif (s[i] == 'x'){
+                i++;
+
+            }
+        }
+        else{
+            fputc(f->fd, s[i]);
+            i++;
+        }
+    }
+}
+
+
+// ------------------------------------ ACCESSING FILES -----------------------------------------------------
+
+
+// ------------------------------------  WRITING/PRINTING TO STDOUT -------------------------------------------------
+
+func void printf(str s, varargs)
+{
+    uint64 varg_count = 0;
+    uint64 str_len = 0;
+    for (uint64 i = 0; s[i] != '\0'; i++){
+        if (s[i] == '%'){
+            varg_count++;
+        }
+        str_len++;
+    }
+
+    ptr<void> curr = varg_start(varg_count);
+    uint64 i = 0;
+    while (s[i] != '\0' && i < str_len){
+        if (s[i] == '%'){
+            i++;
+            // Case uint8,int8,uint16,int16
+            if (s[i] == 'h'){
+                i++;
+                // Case uint8,int8
+                if (s[i] == 'h'){
+                    i++;
+                    // Case uint8
+                    if (s[i] == 'u'){
+                        i++;
+                        fprint(STDOUT, *(ptr<uint8>)curr);
+                        curr = varg_next(curr);
+                    }
+                    // Case int8
+                    elseif (s[i] == 'i'){
+                        i++;
+                        fprint(STDOUT, *(ptr<int8>)curr);
+                        curr = varg_next(curr);
+                    }
+                    // Case hex 8 bits
+                    elseif (s[i] == 'x'){
+                        i++;
+                        fprintHex(STDOUT, *(ptr<uint8>)curr);
+                        curr = varg_next(curr);
+                    }
+                }
+                // Case uint16 
+                elseif(s[i] == 'u'){
+                    i++;
+                    fprint(STDOUT, *(ptr<uint16>)curr);
+                    curr = varg_next(curr);
+                }
+                // Case int16
+                elseif(s[i] == 'i'){
+                    i++;
+                    fprint(STDOUT, *(ptr<int16>)curr);
+                    curr = varg_next(curr);
+                }
+                // Case hex 16 bits
+                elseif (s[i] == 'x'){
+                    i++;
+                    fprintHex(STDOUT, *(ptr<uint16>)curr);
+                    curr = varg_next(curr);
+                }
+            }
+
+            // Case uint32
+            elseif (s[i] == 'u'){
+                i++;
+                fprint(STDOUT, *(ptr<uint32>)curr);
+                curr = varg_next(curr);
+            }
+            // Case int32
+            elseif (s[i] == 'i'){
+                i++;
+                fprint(STDOUT, *(ptr<int32>)curr);
+                curr = varg_next(curr);
+            }
+            // Case hex 32 bits
+            elseif (s[i] == 'x'){
+                i++;
+                fprintHex(STDOUT, *(ptr<uint32>)curr);
+                curr = varg_next(curr);
+            }
+            // Case uint64, int64
+            elseif (s[i] == 'l'){
+                i++;
+                // Case uint64
+                if (s[i] == 'u'){
+                    i++;
+                    fprint(STDOUT, *(ptr<uint64>)curr);
+                    curr = varg_next(curr);
+                }
+                // Case int64
+                elseif (s[i] == 'i'){
+                    i++;
+                    fprint(STDOUT, *(ptr<int64>)curr);
+                    curr = varg_next(curr);
+                }
+
+                elseif (s[i] == 'x'){
+                    i++;
+                    fprintHex(STDOUT, *(ptr<uint64>)curr);
+                    curr = varg_next(curr);
+                }
+            }
+
+            // string
+            elseif (s[i] == 's'){
+                i++;
+                str st = *(ptr<str>)curr;
+                fprint(STDOUT, st);
+                curr = varg_next(curr);
+            }
+            // char
+            elseif (s[i] == 'c'){
+                i++;
+                fprint(STDOUT, *(ptr<char>)curr);
+                curr = varg_next(curr);
+            }
+            // boolean
+            elseif (s[i] == 'B'){
+                i++;
+                fprint(STDOUT, *(ptr<bool>)curr);
+                curr = varg_next(curr);
+            }
+            // pointer
+            elseif (s[i] == 'p'){
+                i++;
+                ptr<void> address = (ptr<void>)*(ptr<uint64>)curr;
+                fprint(STDOUT, address);
+                curr = varg_next(curr);
+            }
+        }
+        else{
+            fputc((int32)1, s[i]);
+            i++;
+        }
+    }
+}
+
+
+//------------------------------------  END WRITING/PRINTING -------------------------------------------------

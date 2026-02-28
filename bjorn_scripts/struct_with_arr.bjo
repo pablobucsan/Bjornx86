@@ -1,4 +1,3 @@
-
 #use "libraries/user_libs/bstdio.bjo"
 
 
@@ -6,15 +5,13 @@ object A
 {
     uint8 count;
     uint8[3] arr;
-};
-
+}
 
 func void main()
 {
-
     A a;
     a.count = 3;
-    for (uint8 i = 0; i < a.count; i = i + 1)
+    for (uint8 i = 0; i < a.count; i++)
     {
         a.arr[i] = i;
         print(a.arr[i]);

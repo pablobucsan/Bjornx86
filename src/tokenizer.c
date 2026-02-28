@@ -3,6 +3,7 @@
 //
 
 #include "../include/tokenizer.h"
+#include "../include/errors.h"
 #include <ctype.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,24 +12,27 @@
 #define INITIAL_TOKENS_SIZE 100
 #define GROWTH_FACTOR 2
 
-char *types[12] = {"int32", "int16","int8", "uint8", "uint16" , "uint32" ,"char", "str", "bool", "void" ,"ptr", "any"};
-char *keywords[] = {"while", "for","foreach","in","within","func", "true", "false", "object", "enum" , "return", "if", "else", "use","inherits", "sizeof","callback", "stop", "skip", "extern" };
+char *types[13] = {"int64", "int32", "int16", "int8", "uint64", "uint8", "uint16" , "uint32" ,"char", "str", "bool", "void" ,"ptr"};
+char *keywords[] = {
+    "while", "for","foreach","in","within","func", "true", "false", 
+    "object", "enum" , "return", "if", "elseif","else", "use","inherits", 
+    "sizeof","callback", "break", "continue", "extern", "varg", "class", "extends", "varargs", "union", "forward" };
 
-char *syscalls[] = {"SYSCALL_PRINT", "SYSCALL_BMALLOC", "SYSCALL_CATCH_1", "SYSCALL_CATCH_2" , "SYSCALL_CATCH_4", "SYSCALL_BFREE", "SYSCALL_THROW",
-                    "SYSCALL_CREATE_THREAD", "SYSCALL_READ"};
-
-
-char char_operators[] = {'+', '-', '%', '*', '/', '<', '>', '&', '!'};
-<<<<<<< Updated upstream
-char char_symbols[] = {'(', ')', '{', '}', ';', ',', '.', '#'};
-char *str_operators[] = {"<=", ">=", "==", "&&", "||", "!="};
-=======
+char char_operators[] = {'+', '-', '%', '*', '/', '<', '>', '&', '!', '|'};
 char *str_operators[] = {"<=", ">=", "==", "&&", "||", "!=", "++", "--"};
-char char_symbols[] = {'(', ')', '{', '}', ';', ',', '.', '#','[',']'};
+char char_symbols[] = {'(', ')', '{', '}', ';', ',', '.', '#','[',']', ':'};
 char *str_symbols[] = {"->"};
->>>>>>> Stashed changes
 char *reassign_symbols[5] = {"-=","+=","*=","/=","%="};
 
+
+Tracker tracker = {.current_src_file = NULL, .current_line = 0};
+int in_type_context = 0;
+
+
+void initTokenizerContext()
+{
+    __initErrorManager();
+}
 
 void skip_comment(char **src)
 {
@@ -36,6 +40,12 @@ void skip_comment(char **src)
     while (**src && **src != '\n') {
         (*src)++;
     }
+}
+
+
+int is_hexchar(char c)
+{
+    return (c == 'A' || c == 'B' || c == 'C' || c == 'D' || c == 'E' || c == 'F');
 }
 
 int is_operator(char c)
@@ -98,18 +108,6 @@ int is_keyword(char *buffer)
     return 0;
 }
 
-int is_syscall(char *buffer)
-{
-    for (int i = 0; i < sizeof(syscalls)/ sizeof(syscalls[0]); i++)
-    {
-        
-        if (strcmp(syscalls[i], buffer) == 0)
-        {
-              return 1;
-        }
-    }
-    return 0;
-}
 
 int is_symbol(char c)
 {
@@ -168,6 +166,7 @@ Token *create_token(TokenType type, const char *value)
     Token *new_tk = malloc(sizeof(Token));
     new_tk->tk_type = type;
     new_tk->tk_value = strdup(value);
+    new_tk->line_number = tracker.current_line;
     return new_tk;
 }
 
@@ -177,6 +176,27 @@ Token *read_number(char **src)
 
     char buffer[32];
     int index = 0;
+
+    // Allow hexadecimal representation. n = 0xF1A;
+    if (**src == '0' && *(*src + 1) == 'x')
+    {
+        // Advance past '0x'
+        (*src) += 2;
+        buffer[0] = '0';
+        buffer[1] = 'x';
+        index += 2;
+        while (isdigit(**src) || is_hexchar(**src))
+        {
+            buffer[index++] = **src;
+            (*src)++;
+        }
+
+        buffer[index] = '\0';
+        //printf("buffer = %s\n", buffer);
+        return create_token(TOKEN_NUMBER, buffer);
+
+    }
+
     while (isdigit(**src))
     {
         buffer[index++] = **src;
@@ -245,6 +265,7 @@ Token *read_char(char **src)
         switch (**src)
         {
             case 'n':  ch = '\n'; break;
+            case 'r':  ch = '\r'; break;
             case 't':  ch = '\t'; break;
             case '\\': ch = '\\'; break;
             case '\'': ch = '\''; break;
@@ -332,27 +353,33 @@ Token *read_str(char **src)
 
 Token *read_identifier(char **src)
 {
-    char buffer[32];
+    char buffer[MAX_IDENTIFIER_LENGTH];
     int index = 0;
-    while (isalpha(**src) || isdigit(**src) || (**src) == '_')
-    {
+    while (isalpha(**src) || isdigit(**src) || (**src) == '_'){
         buffer[index++] = **src;
         (*src)++;
     }
     buffer[index] = '\0';
 
+    if (strcmp(buffer, "ptr") == 0){
+        in_type_context++;
+    }
+
     if (is_type(buffer)) return create_token(TOKEN_TYPE, buffer);
 
     if (is_keyword(buffer)) return create_token(TOKEN_KEYWORD, buffer);
 
-    if (is_syscall(buffer)) return create_token(TOKEN_SYSCALL, buffer);
 
     return create_token(TOKEN_IDENTIFIER, buffer);
 
 }
 
-Token **tokenize(char *src)
+Token **tokenize(char *src, char *filePath)
 {
+
+    tracker.current_src_file = filePath;
+    tracker.current_line = 1;
+
     size_t capacity = INITIAL_TOKENS_SIZE;
     size_t size = 0;
 
@@ -367,7 +394,7 @@ Token **tokenize(char *src)
             if (!tokens) { fprintf(stderr, "Realloc for tokens failed! \n"); exit(1); }
         }
 
-
+        if (*src == '\n') { tracker.current_line++; }
         if (isspace(*src)){ src++; }
         else if (*src == '/' && *(src + 1) == '/') { skip_comment(&src); }
         else if (isdigit(*src)) { tokens[size++] = read_number(&src); }
@@ -377,11 +404,46 @@ Token **tokenize(char *src)
         else if (*src == '=' && *(src + 1) != '=') { tokens[size++] = create_token(TOKEN_ASSIGN, "="); src++; }
         else if (is_reassign_symbol(src)) { tokens[size++] = read_reassign_symbol(&src); }
         else if (is_multi_char_operator(src)) { tokens[size++] = read_multi_char_operator(&src); }
+
+        // === SPECIAL HANDLING FOR > (and >> shift) ===
+        else if (*src == '>') {
+            if (in_type_context > 0) {
+                // Inside ptr<...> → treat as closing token
+                in_type_context--;
+                tokens[size++] = create_token(TOKEN_OPERATOR, ">");
+                src++;
+            }
+            else if (src[1] == '>') {
+                // Outside type context → >> is right shift
+                tokens[size++] = create_token(TOKEN_OPERATOR, ">>");
+                src += 2;
+            }
+            else {
+                tokens[size++] = create_token(TOKEN_OPERATOR, ">");
+                src++;
+            }
+            continue;
+        }
+
+        // === SPECIAL HANDLING FOR < (and << shift) ===
+        else if (*src == '<') {
+            if (src[1] == '<' && in_type_context == 0) {
+                // Only match << as shift when NOT in type context
+                tokens[size++] = create_token(TOKEN_OPERATOR, "<<");
+                src += 2;
+            }
+            else {
+                // Always treat single < as symbol (opens type or comparison)
+                tokens[size++] = create_token(TOKEN_OPERATOR, "<");
+                src++;
+            }
+            continue;
+        }
+
         else if (is_multi_char_symbol(src)) { tokens[size++] = read_multi_char_symbol(&src); }
         else if (is_operator(*src)){ tokens[size++] = read_operator(&src); }
         else if (is_symbol(*src)){ tokens[size++] = read_symbol(&src); }
-        else
-        {
+        else{
             fprintf(stderr, "Unsupported character to tokenize: %c \n", *src);
             exit(1);
         }
@@ -417,7 +479,7 @@ void print_tokens(Token **tokens)
     while (tokens[index]->tk_type != TOKEN_EOF)
     {
         printf("(%s : %s)\n",tokenTypeToStr(tokens[index]->tk_type), tokens[index]->tk_value);
-       index++;
+        index++;
     }
     printf("(%s : %s)\n",tokenTypeToStr(tokens[index]->tk_type), tokens[index]->tk_value);
     

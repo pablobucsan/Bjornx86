@@ -1,0 +1,49 @@
+
+#use "bstdio.bjo"
+
+
+func uint64 abs(uint64 n){
+    return n;
+}
+
+func uint64 abs(int64 n){
+    if(n < 0){
+        return -n;
+    }
+    return (uint64)n;
+}
+
+func uint8 bitsof(uint64 n)
+{
+    uint8 bits = 0; 
+    uint64 m = 2 << bits;
+    while (m <= n){
+        bits++;
+        m = 2 << bits;
+    }
+
+    return bits + 1;
+}
+
+func uint8 bitsof(int64 n)
+{
+    return bitsof(abs(n));
+}
+
+func uint8 digitsof(uint64 n)
+{
+    uint8 digits = 0;
+    uint64 m = 10;
+
+    while (m <= n){
+        digits++;
+        m = m * 10;
+    }
+
+    return digits + 1;
+}
+
+func uint8 digitsof(int64 n)
+{
+    return digitsof(abs(n));
+}

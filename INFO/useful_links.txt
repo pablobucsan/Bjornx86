@@ -1,0 +1,14 @@
+
+
+
+1: LINUX SYSCALLS
+https://syscalls.mebeim.net/?table=x86/64/x64/latest
+
+2: LINUX SYSCALLS IMPLEMENTATION
+https://elixir.bootlin.com/linux/v6.17/source/fs
+
+3: ASCII VALUES
+https://www.ascii-code.com/
+
+4: ELF 
+https://wiki.osdev.org/ELF

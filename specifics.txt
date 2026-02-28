@@ -1,0 +1,12 @@
+1.  Fixed malloc() bug when allocation size was a page size. Given that the first 32 bytes of a new heap
+    is metadata, we were never getting truly 4096 bytes for the user and that resulted in an infinite loop
+    of creating new heaps. Fix was to just mmap the allocating size + heap header size when creating a new heap
+2. Added based type enums and the possiblity to assign values 
+enum A : uint16
+{
+    FIRST, 
+    SECOND = 3,
+    THIRD = 65,
+    FOURTH = 300,
+}
+3. Better type system (again), now parsing straight from tokens

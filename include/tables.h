@@ -2,143 +2,111 @@
 // Created by pablo on 03/03/2025.
 //
 
+
+
 #ifndef ABC_TABLES_H
 #define ABC_TABLES_H
 
-typedef struct FunctionTable FunctionTable;
-typedef struct SymbolTable SymbolTable;
+#include "types.h"
+#include "register.h"
+#include "context.h"
+#include "parameter.h"
 
-#define MAX_NESTING 100
 #define MAX_SIZE_STACK 100
 
 
-typedef struct ImmediateParam
-{
-    char *type;
-    char *param_name;
-}ImmediateParam;
+#define SYMBOLTABLE_RESIZE_FACTOR 2
+#define SYMBOLTABLE_INIT_CAPACITY 10
 
-typedef struct FunctionParam
-{
-    char *type;             //callback for function params
-    char *return_type;
-    char *identifier;
-    char **params_type;
-    int params_count;
-}FunctionParam;
+#define FUNCTIONTABLE_RESIZE_FACTOR 2
+#define FUNCTIONTABLE_INIT_CAPACITY 10
 
-typedef struct Param 
-{
-    enum 
-    {
-        PARAM_IMMEDIATE,
-        PARAM_FUNCTION
-    }supertype;
+#define CLASSTABLE_RESIZE_FACTOR 2
+#define CLASSTABLE_INIT_CAPACITY 10
 
-    union
-    {
-        ImmediateParam immediateParam;
-        FunctionParam functionParam;
+#define OBJECTTABLE_RESIZE_FACTOR 2
+#define OBJECTTABLE_INIT_CAPACITY 10
+
+#define ENUMTABLE_RESIZE_FACTOR 2
+#define ENUMTABLE_INIT_CAPACITY 10
+
+#define STRINGTABLE_RESIZE_FACTOR 2
+#define STRINGTABLE_INIT_CAPACITY 10
+
+#define INTERMEDIATE_TAG_RESIZE_FACTOR 2
+#define INTERMEDIATE_TAG_INIT_CAPACITY 10
+
+#define INIT_FUNC_CANDIDATES_CAPACITY 5
+#define FUNC_CANDIDATES_RESIZE_FACTOR 2
+
+typedef struct Symbol Symbol;
+typedef struct SymbolTable SymbolTable;
+typedef struct FunctionMetaInfo FunctionMetaInfo;
+typedef struct Function Function;
+typedef struct FunctionTable FunctionTable;
+typedef struct Class Class;
+typedef struct ClassTable ClassTable;
+typedef struct Object Object;
+typedef struct ObjectTable ObjectTable;
+typedef struct Enum Enum;
+typedef struct EnumTable EnumTable;
+
+typedef struct FunctionCandidates FunctionCandidates;
+
+
+
+typedef struct FunctionCandidates
+{
+    int count;
+    int capacity;
+    Function **func_candidates;
+}FunctionCandidates;
+
+typedef enum LabelKind
+{
+    TAG,
+    COMPOUND
+}LabelKind;
+
+typedef struct Tag
+{
+    char *tag_name;
+}Tag;
+
+typedef struct CompoundLabel
+{
+    int intermediate_tags_capacity;
+    int intermediate_tags_count;
+    Tag *start_tag;
+    Tag **intermediate_tags;
+    Tag *end_tag;
+}CompoundLabel;
+
+typedef struct Label
+{
+    LabelKind kind;
+    union{
+        Tag tag;
+        CompoundLabel compound_label;
     };
-}Param;
-
-
-typedef struct FunctionType
-{
-    char *rt_type;
-    char **params_types;
-    int param_count;
-}FunctionType;
+}Label;
 
 
 typedef enum SymbolTableKind
 {
     KIND_FUNCTION_ST,
-    KIND_OBJECT_ST
+    KIND_OBJECT_ST,
+    KIND_CLASS_ST
 }SymbolTableKind;
-
-typedef enum ContextType
-{
-    CTX_NONE,
-    CTX_FUNCTION,
-    CTX_FUNC_CALL,
-    CTX_IF,
-    CTX_ELSE,
-    CTX_WHILE,
-    CTX_FOR,
-    CTX_FOREACH
-}ContextType;
-
-typedef struct Context 
-{
-    int current_scope;
-    int function_block_id;
-    int func_call_id;
-    int if_block_id;
-    int else_block_id;
-    int while_block_id;
-    int for_block_id;
-    int foreach_block_id;
-    ContextType ctx_type_stack[MAX_NESTING];
-}Context;
-
-
-        
-
-typedef struct Symbol
-{
-    char *type;                     //i32, char, str, bool
-    char *identifier;               //name
-    int scope;                      //0 = global, 1 = local
-    int index;                      //index within table
-    int param_index;                // keeping track of the param index, -1 if its not a param
-    int offset;                     // offset in memory
-    int size;                       // size of the symbol
-    ContextType declaration_ctx;    // Where has this symbol been defined: inside an IF,FOR,WHILE...? 
-    int ctx_block_id;               // In what block has it been defined? Two iterators in two consecutive for loops have the same 
-                                    // scope and declaration_ctx but have a different ctx_block_id 
-
-    //Symbol could be reference to function
-    int fn_unique_id;               //-1 if symbol is immediate, -2 if placeholder for caller function, otherwise function->unique_id
-    char *fn_return_type;
-    char **fn_param_types;
-    int fn_param_count;
-}Symbol;
-
-
-
-typedef struct Function
-{
-    char *rt_type;
-    char *identifier;
-    Param **params;
-    SymbolTable *local_symbols;
-    FunctionTable *local_functions;
-    int index;
-    int scope;
-    int param_count;
-    int unique_id;
-}Function;
-
-typedef struct Object
-{
-    char *identifier;
-    struct Object *parent;
-    SymbolTable *local_symbols;
-}Object;
-
-typedef struct Enum 
-{
-    char *identifier;
-}Enum;
 
 
 typedef struct SymbolTable
 {
     SymbolTableKind kind;
     Symbol **symbols;
-    int size;
+    int capacity;
     int weight;
+    int padding;
     int count;
     SymbolTable *parentST;
     int scope;
@@ -147,7 +115,7 @@ typedef struct SymbolTable
 typedef struct FunctionTable
 {
     Function **functions;
-    int size;
+    int capacity;
     int count;
     int scope;
     FunctionTable *parentFT;
@@ -156,22 +124,193 @@ typedef struct FunctionTable
 typedef struct ObjectTable
 {
     Object **objects;
-    int size;
+    int capacity;
     int count;
 }ObjectTable;
 
 typedef struct EnumTable 
 {
     Enum **enums;
-    int size;
+    int capacity;
     int count;
 }EnumTable;
 
+typedef struct ClassTable
+{
+    Class **classes;
+    int capacity;
+    int count;
+}ClassTable;
 
-int isAllowedContext(ContextType ctx_type);
-ContextType get_current_context();
 
-ContextType get_current_bt_context();
+typedef enum SymbolKind
+{
+    SYMBOL_GLOBAL,
+    SYMBOL_LOCAL
+}SymbolKind;
+
+typedef enum LocalVarKind
+{
+    LOCAL_PARAMETER,
+    LOCAL_VAR,
+}LocalVarKind;
+
+typedef enum GlobalVarKind 
+{
+    GLOBAL_EXTERN,
+    GLOBAL_VAR
+}GlobalVarKind;
+
+typedef struct SymbolMetaInfo
+{
+    Type *type;
+    char *identifier;
+    int def_line_number;
+    char *def_src_file;
+    int size;
+    int scope;
+    int index;
+    int offset;
+    ContextBlock def_ctx;
+}SymbolMetaInfo;
+
+typedef struct SymbolExternVar
+{
+    int is_allocated;
+}SymbolExternVar;
+
+typedef struct SymbolGlobalVar
+{
+
+}SymbolGlobalVar;
+
+typedef struct SymbolGlobal
+{
+    GlobalVarKind global_kind;
+    union {
+        SymbolExternVar symbolExternVar;
+        SymbolGlobalVar symbolGlobalVar;
+    };
+}SymbolGlobal;
+
+typedef struct SymbolParameter
+{
+    int parameter_index;
+}SymbolParameter;
+
+typedef struct SymbolLocalVar
+{
+
+}SymbolLocalVar;
+
+typedef struct SymbolLocal
+{
+    LocalVarKind local_kind;
+    union {
+        SymbolParameter symbolParameter;
+        SymbolLocalVar symbolLocalVar;
+    };
+}SymbolLocal;
+
+typedef struct Symbol
+{
+    SymbolKind symbol_kind;
+    SymbolMetaInfo *smi;
+    union{
+        SymbolGlobal s_global;
+        SymbolLocal s_local;
+    };
+}Symbol;
+
+
+typedef struct StringTable
+{
+    int capacity;
+    int count;
+    char **saved_strings;
+    Label **labels;
+}StringTable;
+
+
+typedef struct FunctionMetaInfo
+{
+    int scope;
+    int index;
+    int has_varargs;
+    int param_count;
+    int def_line_number;
+    char *def_src_file;
+    char *name;
+    Parameter **parameters;
+    Type *rt_type;
+    Label *reference_labels;
+    SymbolTable *local_symbols;
+    FunctionTable *local_functions;
+
+}FunctionMetaInfo;
+
+typedef struct SingleFunction
+{
+    int is_forward;
+}SingleFunction;
+
+typedef struct MethodFunction
+{
+    Class *class_owner;
+}MethodFunction;
+
+
+typedef struct Function
+{
+    enum{
+        FUNCTION_SINGLE,
+        FUNCTION_METHOD,
+    }kind;
+
+    union{
+        MethodFunction method;
+        SingleFunction single;
+    };
+
+    FunctionMetaInfo *fmi;
+}Function;
+
+
+typedef struct Object
+{
+    int def_line_number;
+    int is_forward;
+    char *identifier;
+    char *def_src_file;
+    Type *type;
+    struct Object *parent;
+    SymbolTable *local_symbols;
+}Object;
+
+typedef struct Enum 
+{
+    int def_line_number;
+    int is_forward;
+    char *def_src_file;
+    char *identifier;
+    Type *type;
+    Type *base_type;
+}Enum;
+
+typedef struct Class
+{
+    int def_line_number;
+    int is_forward;
+    char *identifier;
+    char *def_src_file;
+    struct Class *parent;
+    Type *type;
+    SymbolTable *local_symbols;
+    FunctionTable *local_functions;
+}Class;
+
+
+
 
 
 #endif //ABC_TABLES_H

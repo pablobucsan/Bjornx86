@@ -1,0 +1,624 @@
+#use "bstdio.bjo"
+#use "bmath.bjo"
+#use "bvarargs.bjo"
+#use "bstdlib.bjo"
+
+func uint64 strlen(str s)
+{
+    uint64 len = 0;
+    for (uint64 i = 0; s[i] != '\0'; i++){
+        len++;
+    }
+    return len;
+}
+
+func uint8 cmpstring(str s1, str s2)
+{
+    // Loop over the chars of the strings
+    uint64 i = 0;
+    while (s1[i] != '\0' && s2[i] != '\0')
+    {
+        if (s1[i] != s2[i]) { return 0; }
+        i++;
+    }
+
+    // If we got here means that either s1[i] == \'0' || s2[i] == '\0'
+    // If both are equal to '\0' then return 1, otherwise 0
+    return s1[i] == s2[i];
+}
+
+func str strdup(str s)
+{
+    uint64 len = strlen(s);
+    str new = malloc(len);
+    memcpy(new, s, len);
+    new[len] = '\0';
+    return new;
+}
+
+
+func uint64 strtolu(ptr<char> s, uint8 base)
+{
+
+
+    uint64 result = 0;
+    uint64 len = strlen(s);
+    uint64 factor = 1;
+
+    for (uint64 i = len - 1; i > 0; i--){
+        result += (s[i] - '0') * factor;
+        factor = factor * base;
+    }
+
+    if (s[0] == '-'){
+        result = result * -1;
+    }
+    else{
+        result += (s[0] - '0') * factor;
+    }
+    
+    //printf("Finished\n");
+    return result;
+}
+
+func str strcat(str s1, str s2)
+{
+    uint64 lens1 = strlen(s1);
+    uint64 lens2 = strlen(s2);
+    str result = zalloc(lens1 + lens2 + 1);  // + 1 for \0
+
+    ptr<char> r_address = result;
+
+    memcpy(r_address, s1, lens1);
+    memcpy(r_address + lens1, s2, lens2);
+    result[lens1 + lens2] = '\0';
+
+    return result;
+}
+
+func uint64 __needed_size_sprintf(ptr<char> fmt, ptr<VA_list> va_list)
+{
+    uint64 total_length = strlen(fmt) - va_list->count;   // remove the % 
+
+    for (uint64 i = 0; i < va_list->count; i++){
+        if (va_list->values[i]->type == __TYPE_U8){
+            total_length += digitsof((uint64)varg_getu8(va_list)) - 3; // hhu
+        }
+        elseif (va_list->values[i]->type == __TYPE_U16){
+            total_length += digitsof((uint64)varg_getu16(va_list)) - 2; // hu
+        }
+        elseif (va_list->values[i]->type == __TYPE_U32){
+            total_length += digitsof((uint64)varg_getu32(va_list)) - 1; // u
+        }
+        elseif (va_list->values[i]->type == __TYPE_U64){
+            total_length += digitsof((uint64)varg_getu64(va_list)) - 2; // lu
+        }
+        elseif (va_list->values[i]->type == __TYPE_I8){
+            int8 x = varg_geti8(va_list);
+            if (x < 0){
+                total_length++;
+            }
+            total_length += digitsof((int64)x) - 3; // hhi
+        }
+        elseif (va_list->values[i]->type == __TYPE_I16){
+            int16 x = varg_geti16(va_list);
+            if (x < 0){
+                total_length++;
+            }
+            total_length += digitsof((int64)x) - 2; // hi
+        }
+        elseif (va_list->values[i]->type == __TYPE_I32){
+            int32 x = varg_geti32(va_list);
+            if (x < 0){
+                total_length++;
+            }
+            total_length += digitsof((int64)x) - 1; // i
+        }
+        elseif (va_list->values[i]->type == __TYPE_I64){
+            int64 x = varg_geti64(va_list);
+            if (x < 0){
+                total_length++;
+            }
+            total_length += digitsof((int64)x) - 2; // li
+        }
+        elseif (va_list->values[i]->type == __TYPE_CHAR){
+            total_length += 0; // c
+        }
+        elseif (va_list->values[i]->type == __TYPE_STR){
+            total_length += strlen(varg_getstr(va_list)) - 1; // s
+        }
+        elseif (va_list->values[i]->type == __TYPE_BOOL){
+            bool b = varg_getbool(va_list);
+            if (b){
+                total_length += 4;
+            }
+            else{
+                total_length += 5;
+            }
+            total_length--; 
+        }
+        elseif (va_list->values[i]->type == __TYPE_PTR){
+            total_length += 8 - 1; // p
+        }
+    }
+
+    return total_length;
+}
+
+func str vsprintf(ptr<char> fmt, ptr<VA_list> va_list)
+{
+
+    uint64 len = __needed_size_sprintf(fmt, va_list);
+    uint64 result_index = 0;
+    uint64 i = 0;   
+
+    // printf("needed size for vsprintf: %lu\n", len);
+    varg_reset(va_list);
+    str result = malloc(len + 1);
+    memset(result, (char)0, len);
+
+
+    while (result_index < len){
+        if (fmt[i] == '%'){
+            i++;
+            if (fmt[i] == 'h'){
+                i++;
+                if (fmt[i] == 'h'){
+                    i++;
+                    if (fmt[i] == 'u'){
+                        i++;
+                        uint8 x = varg_getu8(va_list);
+                        uint8 digits = digitsof((uint64)x);
+                        for (int8 k = digits - 1; k >= 0; k--){
+                            char digit = (char)(x % 10) + '0';
+                            result[result_index + k] = digit;
+                            x = x / 10;
+                        }
+                        result_index += digits;
+                    }
+                    elseif (fmt[i] == 'i'){
+                        i++;
+                        int8 x = varg_geti8(va_list);
+                        if (x < 0){
+                            result[result_index++] = '-';
+                            x = -x;
+                        }
+                        uint8 digits = digitsof((int64)x);
+                        for (int8 k = digits - 1; k >= 0; k--){
+                            char digit = (char)(x % 10) + '0';
+                            result[result_index + k] = digit;
+                            x = x / 10;
+                        }
+                        result_index += digits;
+                    }
+                }
+
+                elseif (fmt[i] == 'u'){
+                    i++;
+                    uint16 x = varg_getu16(va_list);
+                    uint8 digits = digitsof((uint64)x);
+                    for (int8 k = digits - 1; k >= 0; k--){
+                        char digit = (char)(x % 10) + '0';
+                        result[result_index + k] = digit;
+                        x = x / 10;
+                    }
+                    result_index += digits;
+                }
+                elseif (fmt[i] == 'i'){
+                    i++;
+                    int16 x = varg_geti16(va_list);
+                    if (x < 0){
+                        result[result_index++] = '-';
+                        x = -x;
+                    }
+                    uint8 digits = digitsof((int64)x);
+                    for (int8 k = digits - 1; k >= 0; k--){
+                        char digit = (char)(x % 10) + '0';
+                        result[result_index + k] = digit;
+                        x = x / 10;
+                    }
+                    result_index += digits;
+                }
+
+            }
+
+            elseif (fmt[i] == 'u'){
+                i++;
+                uint32 x = varg_getu32(va_list);
+                uint8 digits = digitsof((uint64)x);
+                for (int8 k = digits - 1; k >= 0; k--){
+                    char digit = (char)(x % 10) + '0';
+                    result[result_index + k] = digit;
+                    x = x / 10;
+                }
+                result_index += digits;
+            }
+
+            elseif (fmt[i] == 'i'){
+                i++;
+                int32 x = varg_geti32(va_list);
+                if (x < 0){
+                    result[result_index++] = '-';
+                    x = -x;
+                }
+                uint8 digits = digitsof((int64)x);
+                for (int8 k = digits - 1; k >= 0; k--){
+                    char digit = (char)(x % 10) + '0';
+                    result[result_index + k] = digit;
+                    x = x / 10;
+                }
+                result_index += digits;
+            }
+
+            elseif (fmt[i] == 's'){
+                i++;
+                str st = varg_getstr(va_list);
+                uint64 stlen = strlen(st);
+                memcpy(result + result_index, st, stlen);
+                result_index += stlen;
+            }
+            elseif (fmt[i] == 'B'){
+                i++;
+                bool b = varg_getbool(va_list);
+                if (b){
+                    memcpy(result + result_index, "true", (uint64)4);
+                    result_index += 4;
+                }
+                else{
+                    memcpy(result + result_index, "false", (uint64)5);
+                    result_index += 5;
+                }
+            }
+            elseif (fmt[i] == 'l'){
+                i++;
+                if (fmt[i] == 'u'){
+                    i++;
+                    uint64 x = varg_getu64(va_list);
+                    uint8 digits = digitsof(x);
+                    for (int8 k = digits - 1; k >= 0; k--){
+                        char digit = (char)(x % 10) + '0';
+                        result[result_index + k] = digit;
+                        x = x / 10;
+                    }
+                    result_index += digits;
+                }
+                elseif (fmt[i] == 'i'){
+                    i++;
+                    int64 x = varg_geti64(va_list);
+                    if (x < 0){
+                        result[result_index++] = '-';
+                        x = -x;
+                    }
+                    uint8 digits = digitsof(x);
+                    for (int8 k = digits - 1; k >= 0; k--){
+                        char digit = (char)(x % 10) + '0';
+                        result[result_index + k] = digit;
+                        x = x / 10;
+                    }
+                    result_index += digits;
+                }
+
+            }
+        }
+        else{
+            // memcpy(result + result_index, &fmt[i], (uint64)1);
+            result[result_index++] = fmt[i];
+            i++;
+            // printf("Result so far: \n[");
+            // for (uint8 i = 0; i < result_index; i++){
+            //     printf("'%c',", result[i]);
+            // }
+            // printf("]\n");
+
+        }
+    }
+    // printf("Finished sprintf: \n");
+    // for (uint8 i = 0; i < needed_size; i++){
+    //     printf("result[%hhu] = '%c'(%hhu)\n", i, result[i], result[i]);
+    // }
+    result[result_index] = '\0';
+    return result;
+
+}
+
+func str sprintf(ptr<char> fmt, varargs){
+    uint64 varg_count = 0;
+    uint64 fmt_len = 0;
+    for (uint64 i = 0; fmt[i] != '\0'; i++){
+        if (fmt[i] == '%'){
+            varg_count++;
+        }
+        fmt_len++;
+    }
+
+    ptr<void> curr = varg_start(varg_count);
+    ptr<void> saved_first = curr;
+    uint64 i = 0;
+    uint64 needed_size = 0;
+
+    // Getting needed size
+    while (fmt[i] != '\0' && i < fmt_len){
+        if (fmt[i] == '%'){
+            i++;
+            if (fmt[i] == 'h'){
+                i++;
+                if (fmt[i] == 'h'){
+                    i++;
+                    if (fmt[i] == 'u'){
+                        i++;
+                        uint8 x = *(ptr<uint8>)curr;
+                        needed_size += digitsof((uint64)x);
+                        curr = varg_next(curr);
+                    }
+                    elseif (fmt[i] == 'i'){
+                        i++;
+                        int8 x = *(ptr<int8>)curr;
+                        if (x < 0){
+                            needed_size++;  // '-'
+                        }
+                        needed_size += digitsof((int64)x);
+                        curr = varg_next(curr);
+                    }
+                }
+
+                if (fmt[i] == 'u'){
+                    i++;
+                    uint16 x = *(ptr<uint16>)curr;
+                    needed_size += digitsof((uint64)x);
+                    curr = varg_next(curr);
+                }
+                elseif (fmt[i] == 'i'){
+                    i++;
+                    int16 x = *(ptr<int16>)curr;
+                    if (x < 0){
+                        needed_size++;  // '-'
+                    }
+                    needed_size += digitsof((int64)x);
+                    curr = varg_next(curr);
+                }
+            }
+            elseif (fmt[i] == 'u'){
+                i++;
+                uint32 x = *(ptr<uint32>)curr;
+                needed_size += digitsof((uint64)x);
+                curr = varg_next(curr);
+            }
+            elseif (fmt[i] == 'i'){
+                i++;
+                int32 x = *(ptr<int32>)curr;
+                if (x < 0){
+                    needed_size++;  // '-'
+                }
+                needed_size += digitsof((int64)x);
+                curr = varg_next(curr);
+            }
+            // string
+            elseif (fmt[i] == 's'){
+                i++;
+                str st = *(ptr<str>)curr;
+                needed_size += strlen(st);
+                curr = varg_next(curr);
+            }
+            // char
+            elseif (fmt[i] == 'c'){
+                i++;
+                needed_size += 1;
+                curr = varg_next(curr);
+            }
+            // boolean
+            elseif (fmt[i] == 'B'){
+                i++;
+                bool b = *(ptr<bool>)curr;
+                if (b){
+                    needed_size += 4;
+                }
+                else{
+                    needed_size += 5;  
+                }
+                curr = varg_next(curr);
+            }
+            elseif (fmt[i] == 'l'){
+                i++;
+                if (fmt[i] == 'u'){
+                    i++;
+                    uint64 x = *(ptr<uint64>)curr;
+                    needed_size += digitsof(x);
+                    curr = varg_next(curr);                    
+                }
+                elseif (fmt[i] == 'i'){
+                    i++;
+                    int64 x = *(ptr<int64>)curr;
+                    if (x < 0){
+                        needed_size++;
+                    }
+                    needed_size += digitsof(x);
+                    curr = varg_next(curr);
+                }
+            }
+        }
+        else{
+            i++;
+            needed_size++;
+        }
+    }
+
+    str result = malloc(needed_size + 1);
+    memset(result, (char)0, needed_size);
+    i = 0;
+
+    // Populating the string
+    curr = saved_first;
+    uint64 result_index = 0;
+    while (result_index < needed_size){
+        if (fmt[i] == '%'){
+            i++;
+            if (fmt[i] == 'h'){
+                i++;
+                if (fmt[i] == 'h'){
+                    i++;
+                    if (fmt[i] == 'u'){
+                        i++;
+                        uint8 x = *(ptr<uint8>)curr;
+                        uint8 digits = digitsof((uint64)x);
+                        for (int8 k = digits - 1; k >= 0; k--){
+                            char digit = (char)(x % 10) + '0';
+                            result[result_index + k] = digit;
+                            x = x / 10;
+                        }
+                        result_index += digits;
+                        curr = varg_next(curr);
+                    }
+                    elseif (fmt[i] == 'i'){
+                        i++;
+                        int8 x = *(ptr<int8>)curr;
+                        if (x < 0){
+                            result[result_index++] = '-';
+                            x = -x;
+                        }
+                        uint8 digits = digitsof((int64)x);
+                        for (int8 k = digits - 1; k >= 0; k--){
+                            char digit = (char)(x % 10) + '0';
+                            result[result_index + k] = digit;
+                            x = x / 10;
+                        }
+                        result_index += digits;
+                        curr = varg_next(curr);
+                    }
+                }
+
+                elseif (fmt[i] == 'u'){
+                    i++;
+                    uint16 x = *(ptr<uint16>)curr;
+                    uint8 digits = digitsof((uint64)x);
+                    for (int8 k = digits - 1; k >= 0; k--){
+                        char digit = (char)(x % 10) + '0';
+                        result[result_index + k] = digit;
+                        x = x / 10;
+                    }
+                    result_index += digits;
+                    curr = varg_next(curr);
+                }
+                elseif (fmt[i] == 'i'){
+                    i++;
+                    int16 x = *(ptr<int16>)curr;
+                    if (x < 0){
+                        result[result_index++] = '-';
+                        x = -x;
+                    }
+                    uint8 digits = digitsof((int64)x);
+                    for (int8 k = digits - 1; k >= 0; k--){
+                        char digit = (char)(x % 10) + '0';
+                        result[result_index + k] = digit;
+                        x = x / 10;
+                    }
+                    result_index += digits;
+                    curr = varg_next(curr);
+                }
+
+            }
+
+            elseif (fmt[i] == 'u'){
+                i++;
+                uint32 x = *(ptr<uint32>)curr;
+                uint8 digits = digitsof((uint64)x);
+                for (int8 k = digits - 1; k >= 0; k--){
+                    char digit = (char)(x % 10) + '0';
+                    result[result_index + k] = digit;
+                    x = x / 10;
+                }
+                result_index += digits;
+                curr = varg_next(curr);
+            }
+
+            elseif (fmt[i] == 'i'){
+                i++;
+                int32 x = *(ptr<int32>)curr;
+                if (x < 0){
+                    result[result_index++] = '-';
+                    x = -x;
+                }
+                uint8 digits = digitsof((int64)x);
+                for (int8 k = digits - 1; k >= 0; k--){
+                    char digit = (char)(x % 10) + '0';
+                    result[result_index + k] = digit;
+                    x = x / 10;
+                }
+                result_index += digits;
+                curr = varg_next(curr);
+            }
+
+            elseif (fmt[i] == 's'){
+                i++;
+                str st = *(ptr<str>)curr;
+                uint64 stlen = strlen(st);
+                memcpy(result + result_index, st, stlen);
+                result_index += stlen;
+                curr = varg_next(curr);
+            }
+            elseif (fmt[i] == 'B'){
+                i++;
+                bool b = *(ptr<bool>)curr;
+                if (b){
+                    memcpy(result + result_index, "true", (uint64)4);
+                    result_index += 4;
+                }
+                else{
+                    memcpy(result + result_index, "false", (uint64)5);
+                    result_index += 5;
+                }
+                curr = varg_next(curr);
+            }
+            elseif (fmt[i] == 'l'){
+                i++;
+                if (fmt[i] == 'u'){
+                    i++;
+                    uint64 x = *(ptr<uint64>)curr;
+                    uint8 digits = digitsof(x);
+                    for (int8 k = digits - 1; k >= 0; k--){
+                        char digit = (char)(x % 10) + '0';
+                        result[result_index + k] = digit;
+                        x = x / 10;
+                    }
+                    result_index += digits;
+                    curr = varg_next(curr);
+                }
+                elseif (fmt[i] == 'i'){
+                    i++;
+                    int64 x = *(ptr<uint64>)curr;
+                    if (x < 0){
+                        result[result_index++] = '-';
+                        x = -x;
+                    }
+                    uint8 digits = digitsof(x);
+                    for (int8 k = digits - 1; k >= 0; k--){
+                        char digit = (char)(x % 10) + '0';
+                        result[result_index + k] = digit;
+                        x = x / 10;
+                    }
+                    result_index += digits;
+                    curr = varg_next(curr);
+                }
+
+            }
+        }
+        else{
+            // memcpy(result + result_index, &fmt[i], (uint64)1);
+            result[result_index++] = fmt[i];
+            i++;
+            // printf("Result so far: \n[");
+            // for (uint8 i = 0; i < result_index; i++){
+            //     printf("'%c',", result[i]);
+            // }
+            // printf("]\n");
+
+        }
+    }
+    // printf("Finished sprintf: \n");
+    // for (uint8 i = 0; i < needed_size; i++){
+    //     printf("result[%hhu] = '%c'(%hhu)\n", i, result[i], result[i]);
+    // }
+    // printf("Needed length = %lu\n", needed_size);
+    result[result_index] = '\0';
+    return result;
+
+}

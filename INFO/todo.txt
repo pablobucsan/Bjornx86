@@ -1,23 +1,20 @@
 
 ///// TODO:
-<<<<<<< Updated upstream
-8. increment and decrement (++ and --) and reassignments like x += y
 
-9. lvalue 
-=======
-
-17. abide by system v abi compliance by only ensuring node_func_call only pushes-pops caller-saved registers and
-    node_func_def pushes-pops callee_saved registers. As of now, node_func_call pushes-pops without taking that into consideration. 
-    Moreover, passing struct objects as arguments by value forces the caller to make a full copy of the object onto its own stack frame 
-    and then the callee as well makes a copy of it. Extremely inefficient so im gonna force pass by pointer but in the future 
-    we can explore add a decorator to functions like (@force_svabi) to ensure we do make the copy and have interoperability with C and blah blah 
+57. global "str s = "whatever"" doesnt work
 
 
-24. emit_instruction() function instead of fprintf-ing like crazy?
 
-28. Save errors somewhere and identify them by number, so when encountering an error we do smth like: raise(error_id = 1, context);
 
->>>>>>> Stashed changes
+29. Refactor the builder so its cleaner
+
+35. call sys_write() in big chunks of buffers, writing 1 char costs the same as writing 4096, so might as well
+    thats kinda the idea of printf() i think, allocate a buffer big enough and when encountering %i write the number there instead etc etc 
+
+
+36. variable amount of arguments for printf() function..?
+
+
 
 ///// DONE 
 1. use the register that best fits the size of the variable. Risk of truncation issues otherwise
@@ -43,8 +40,6 @@
    -> Extern function ast node 
 
 
-<<<<<<< Updated upstream
-=======
 9. lvalue (pain) 
 
 
@@ -185,6 +180,7 @@ Solution: push - pop the register holding the total result so its saved across c
 }
 
 
+24. emit_instruction() function instead of fprintf-ing like crazy?
 
 
 19. Function's symbol table weight needs to account for the padding as well, every variable needs to be stored 
@@ -293,7 +289,6 @@ Solution:
                         if (!checkIfLeftInAL) { fprintf(asm_file, "    mov %s, al \n", left.linkedToRegister->name); }
 
 
->>>>>>> Stashed changes
 
 21. more than 6 parameters for functions
 
@@ -361,17 +356,97 @@ if (left.linkedToRegister->size != right.linkedToRegister->size)
    solution: implement a NODE_STDALONE_POSTFIX_OP to distinct between x++; and print(x++) statements
 
 
-   
+31. traverse the ast to collect the strings. A separate function 
+
+32. ENUMS. ✅
+
+33. CASTING ✅
+
+34. nested functions. 
+    solution: emit first the inner functions, mark them as visited, and then emit the outer functions. 
+              had to change symbol table parenting. before: allowed for a function symbol table to have the outer function table as parent 
+                                                            this allowed for successful lookup of variables defined in the outer function, within the inner function 
+                                                    now: every function table has as parent the global symbol table
+
+
+
+38. implement elseif ✅. 
+
+41. better error system, analyze is done, focus on ast now. ✅
+    Solution: 
+            Enum of errors and an array of messages mapping ERROR_CODE to MSG. 
+            Based on the error we can pass some context to populate the msg. 
+            raise(CError cerror, char *first, char *second, char *third);
+
+43. have everything work with 2 registers ==> forces proper spilling .
+    have nodes that consume values in registers be the ones that collect the spilled registers 
+    and only collect the ones that the children nodes spilled 
+
+    case NODE_THAT_CONSUMES:
+    {
+        -Record before_potential_spilling_state;
+
+        -buildStart(children nodes)
+
+        -Consume the result 
+
+        -collect potential spilling until math before state
+    }
+
+    Solution: Everything works with 3 registers. two we cant with our current approach and its pointless since some operations like rep movsb require 
+              3 registers✅
+
+44. printing binary and hexadecimal✅
+
+46. add uint64 and int64 types ✅ 
+
+47. support numbers in hexadecimal representation ✅ 
+48. Added classes, inherticance between them with the "extends" keyword, overriding methods and polymorphism (instances call their method definition if they have one 
+    otherwise they fallback onto parent class)✅ 
+
+49. Proper handling of return node, must ensure the return is in a register matching the size of the function return type 
+    My god this bug was something... ✅
+    Lets say we have func uint32 foo(), and there is a code path that returns an immediate 3, then 
+    this would have been written to AL, but the upper bits (EAX is what we actually want to return) are garbage
+    from whatever operations from before. Sometimes it helps to debug in hexadecimal to catch these things.
+
+50. when collecting spilled registers, we cant pop regX if regX is pinned, must mov regNotPinned, regX and then pop regX ✅
+
+52. int8 y = -3 * 2;   -> not correctly parsed ✅ 
+    Solution: The unary operators shouldnt be parsed with a while because they are right associate and non repeating, changed that to an if().
+    Also, allowed parseUnit to catch unary operations itself.
+
+53. implemented malloc, free, realloc and heap management ✅
+
+54. new type system ✅
+
+55. short circtuit && , || ✅
+
+56. added printf and variadic functions ✅
+Type         | Specifier | Meaning / Size
+-------------|-----------|-----------------
+uint8        | %hhu      | unsigned 8-bit (byte)
+int8         | %hhi      | signed 8-bit (byte)
+uint16       | %hu       | unsigned 16-bit (word/half)
+int16        | %hi       | signed 16-bit
+uint32       | %u        | unsigned 32-bit (natural)
+int32        | %i        | signed 32-bit
+uint64       | %lu       | unsigned 64-bit (long unsigned)
+int64        | %li       | signed 64-bit (long)
+bool         | %B        | boolean (true/false)
+char         | %c        | character
+str          | %s        | string
+ptr<T>       | %p        | pointer address (hex)
+
 ========================================================
 /////CONSIDERATIONS
 1. Objects definitions inside functions ===> Global objects
 2. Only allow declarations/assignments in global scope?
-3. Only one level dereference to fields:  (*ptr_to_instance).field_name ALLOWED / (**double_ptr_to_instance).field_name NOT ALLOWED
-4. Max unsigned integer: 2 ^ 32 - 1.  Max integer: 2147483647. Min integer: -2147483647.   2 ^ 31 - 1
 5. Function overload sensitive to differences between different types of int (maybe that's good?)
-6. (*ptr + 1) SHOULD BE ( *ptr + 1 * sizeof(type pointed at by ptr) )      (maybe that provides more control?)
 7. sizeof(type) needs "object" keyword if calculating the size of an Object
 8. Immediate positive numbers are assumed to be "uintX", programmer's responsability. 
 9. Variable name "__foreach_counterX" reserved for inner counter in foreach loop.
+10. At least 3 gpr registers needed to work.
 
         
+

@@ -1,4 +1,0 @@
-
-// null pointer
-// points to address 0 -> invalid address
-ptr<any> null = (ptr<any>)0;

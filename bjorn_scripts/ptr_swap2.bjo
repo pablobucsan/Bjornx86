@@ -21,6 +21,7 @@ func void main()
     bob.field = 20;
     ptr<A> pdummy = &dummy;
     ptr<A> pbob = &bob;
+    
     print(pdummy->field);
 
     swap(&pdummy, &pbob);

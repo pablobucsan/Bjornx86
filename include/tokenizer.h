@@ -5,8 +5,9 @@
 #ifndef ABC_TOKENIZER_H
 #define ABC_TOKENIZER_H
 
+#define MAX_IDENTIFIER_LENGTH 100
 
-extern char *types[12];
+extern char *types[13];
 extern char *reassign_symbols[5];
 typedef enum TokenType
 {
@@ -28,14 +29,24 @@ typedef enum TokenType
     TOKEN_EOF
 } TokenType;
 
+typedef struct Tracker 
+{
+    int current_line;
+    char *current_src_file;
+}Tracker;
+
+extern Tracker tracker;
+
+
 typedef struct Token
 {
     TokenType tk_type;
     char *tk_value;
+    int line_number;
 } Token;
 
-
-Token **tokenize(char *src);
+void initTokenizerContext();
+Token **tokenize(char *src, char *filePath);
 void print_tokens(Token **tokens);
 char *tokenTypeToStr(TokenType type);
 int is_reassign_symbol(char *src);

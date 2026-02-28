@@ -1,71 +1,21 @@
-#use "libraries/user_libs/bstdio.bjo"
-<<<<<<< Updated upstream
 
-func void main()
+// #use "libraries/user_libs/bstdio.bjo"
+// #use "libraries/user_libs/bstdlib.bjo"
+// #use "libraries/user_libs/bstring.bjo"
+
+
+object Foo
 {
-    int8 a = 10;
-    char c = 'A';
-    c = 'B';
-    print(c);
-
-    for (uint8 i = 0; i < 5; i += 1)
-    {
-        a = a - i;
-        print(a);
-    }
-=======
-
-
-
-object A 
-{
-    uint32 x;
-    uint32 y;
-    uint32 z;
+    uint32 weird;
 }
 
-func void test(ptr<A> a)
+func uint32 Nolose()
 {
-    a->x++;
+    ptr<Foo> f;
+    return 0x40 + f->weird;
 }
 
-
-func void main()
+func void main(uint64 argc, ptr<str> argv)
 {
-    A a;
-    a.x = 0;
-    a.y = 1;
-    a.z = 2;
 
-    A b;
-    b.x = 5;
-    b.y = 1;
-    b.z = 2;
-
-    A c;
-    c.x = 7;
-    c.y = 1;
-    c.z = 2;
-
-
-    a = b;
-
-
-    ptr<A>[3] p_arr = [&a, &b, &c];
-    A[3] arr = [a,b,c];
-
-    print(arr[0].x);
-    print(arr[1].x);
-    print(arr[2].x);
-
-
-    a = arr[2];
-
-    test(p_arr[0]);
-
-    print(a.x);
-
-
->>>>>>> Stashed changes
 }
-
