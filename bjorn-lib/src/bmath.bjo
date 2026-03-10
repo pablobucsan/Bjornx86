@@ -1,0 +1,34 @@
+
+#use "../berries/bmath.berry"
+
+
+func uint64 abs(uint64 n){
+    return n;
+}
+
+func uint64 abs(int64 n){
+    if(n < 0){
+        return -n;
+    }
+    return (uint64)n;
+}
+
+
+func uint8 digitsof(int64 n, uint64 base)
+{
+    if (n < 0){
+        n = -n;
+    }
+    
+    if (n == 0){
+        return 1;
+    }
+
+    uint8 digits = 0;
+    while (n > 0) {
+        digits++;
+        n = n / base;
+    }
+    
+    return digits;
+}

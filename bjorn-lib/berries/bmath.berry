@@ -1,0 +1,14 @@
+
+
+// LAST UPDATE: 1/3/2026
+
+// DEFINES THE FOLLOWING FUNCTIONS
+
+// Absolute value of a number
+forward func uint64 abs(uint64 n);
+forward func uint64 abs(int64 n);
+
+// Calculate the number of digits a number would be in a given base
+forward func uint8 digitsof(int64 n, uint64 base);
+
+

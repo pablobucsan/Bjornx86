@@ -1,0 +1,135 @@
+
+
+
+
+
+// LAST UPDATE: 1/3/2026
+
+
+// DEFINES THE FOLLOWING ENUMS
+
+
+enum FileOpenFlags : uint16 
+{
+    // Basic access modes (Exactly one of these)
+    O_RDONLY = 0x0,   // Can only read
+    O_WRONLY = 0x1,   // Can only write
+    O_RDWR = 0x2,     // Can read and write
+
+    // Creation/ modification flags
+    O_CREATE = 0x40,  // Create if the file does not exist
+    O_TRUNC = 0x200,  // Truncate file to 0 length if it exists (for writing, basically overwrite)
+    O_APPEND = 0x400, // Appends to the file (no overwritting)
+
+    // Handy named combinations
+    READ = 0x0,                         // Read existing file
+    READ_UPDATE = 0x2,                  // Read + write existing file
+    WRITE = 0x1 | 0x40 | 0x200,         // Write, create if needed, truncate if exists 
+    READ_WRITE = 0x2 | 0x40 | 0x200,    // Read + write, create if needed, truncate if exists
+    APPEND = 0x1 | 0x40 | 0x400,        // Append, create if needed
+    READ_APPEND = 0x2 | 0x40 | 0x400,   // Read + append, create if needed (read starts at the beginning, writing appends)
+}
+
+enum FileMode : uint16 
+{
+    // User permissions
+    USER_READ = 0x100, 
+    USER_WRITE = 0x80,
+    USER_EXE = 0x40,
+
+    // Group permissions
+    GROUP_READ = 0x20,
+    GROUP_WRITE = 0x10,
+    GROUP_EXE = 0x8,
+
+    // Other (everyone else)
+    OTHER_READ = 0x4,
+    OTHER_WRITE = 0x2,
+    OTHER_EXE = 0x1,
+
+
+    // Handy named combinations
+    USER_RWX = 0x100 | 0x80 | 0x40,
+    GROUP_RWX = 0x20 | 0x10 | 0x8,
+    OTHER_RWX = 0x4 | 0x2 | 0x1,
+
+    // Mode644  = UserRead | UserWrite | GroupRead | OtherRead,
+    MODE644 = 0x100 | 0x80 | 0x20 | 0x4,
+    // Mode755 = UserRead | UserWrite | UserExe | GroupRead | GroupExe | OtherRead | OtherExe
+    MOD755 = 0x100 | 0x80 | 0x40 | 0x20 | 0x8 | 0x4 | 0x1,
+    // Mode666 = UserRead | UserWrite | GroupRead | GroupWrite | OtherRead | OtherWrite
+    MODE666 = 0x100 | 0x80 | 0x20 | 0x10 | 0x4 | 0x2,
+    // Mode777 = UserRWX | GroupRWX | OtherRWX
+    MODE777 = 0x100 | 0x80 | 0x40 | 0x20 | 0x10 | 0x8 | 0x4 | 0x2 | 0x1,
+}
+
+
+
+
+// DEFINES THE FOLLOWING OBJECTS
+
+object File 
+{
+    str filePath;       // copy of filepath
+    uint64 fpos;        // file position
+    int32 fd;          // file descriptor, int because it can be negative for error purposes
+    FileOpenFlags open_flags;  // open flags used to open the file
+    FileMode mode;        // mode used to open the file
+}
+
+
+// DEFINES THE FOLLOWING VALUES
+
+extern ptr<File> STDOUT;
+int8 EOF = -1;
+
+
+
+// DEFINES THE FOLLOWING FUNCTIONS
+// Prints a char to the provided file descriptor
+extern func void fputc(int32 fd, char c);
+
+// Opens the file at the location specified with specified open flags and potentially file modes
+extern func int32 open(str filePath, uint64 open_flags, uint64 mode);
+
+// Closes the file associated with the file descriptor.
+// Closing is important because other processes cant access them while still open, wastes memory
+// resource limits of file descriptors, often 1024
+extern func int32 close(int32 fd);
+
+// Reads "count" chars from the file associated to the provided file descriptor and puts it into "buf"
+extern func uint32 read(int32 fd, ptr<char> buf, uint32 count);
+
+// Prints a char to stdout
+extern func void putc(char c);
+
+// Prints a buffer of size 'count' to the file associated with the file descriptor
+extern func void write(int32 fd, str buffer, uint32 count);
+
+// Creates a directory 
+extern func int32 mkdir(str pathname, uint64 mode);
+
+// Opens a file at the given filepath with the provided flags
+forward func ptr<File> fopen(str filePath, FileOpenFlags flags);
+
+// Reads 'bytes' amount and puts it into buffer
+forward func uint32 freadBytes(ptr<File> f, ptr<char> buf, uint32 bytes);
+
+// Reads everything in the file and returns it
+forward func ptr<char> freadAll(ptr<File> f);
+
+// Reads one char from the file
+forward func char fgetc(ptr<File> f);
+
+// Closes the file
+forward func void fclose(ptr<File> f);
+
+// Wrapper for mkdir()
+forward func int32 makeDirectory(str pathname, FileMode mode);
+
+// Formatted writing to a file
+forward func void fprintf(ptr<File> f, str s, varargs);
+
+// Formatted writing to stdout
+forward func void printf(str s, varargs);
+

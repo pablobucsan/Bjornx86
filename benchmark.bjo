@@ -1,0 +1,898 @@
+// ============================================================
+// benchmark.bjo
+// Compiler benchmark: exercises type checking, name resolution,
+// nested expressions, control flow, objects, and pointer chains.
+// ============================================================
+
+#use "bstdlib.berry"
+#use "bstdio.berry"
+
+// ===================== OBJECT DEFINITIONS =====================
+
+object Vec2
+{
+    int32 x;
+    int32 y;
+}
+
+object Vec3
+{
+    int32 x;
+    int32 y;
+    int32 z;
+}
+
+object Matrix2x2
+{
+    int32 a;
+    int32 b;
+    int32 c;
+    int32 d;
+}
+
+object ListNode
+{
+    int64 value;
+    ptr<ListNode> next;
+}
+
+object TreeNode
+{
+    int64 value;
+    ptr<TreeNode> left;
+    ptr<TreeNode> right;
+}
+
+object Pair
+{
+    int64 first;
+    int64 second;
+}
+
+object Stats
+{
+    int64 sum;
+    int64 min;
+    int64 max;
+    uint64 count;
+}
+
+// ===================== MATH UTILITIES =====================
+
+func int32 add_i32(int32 a, int32 b)
+{
+    return a + b;
+}
+
+func int32 sub_i32(int32 a, int32 b)
+{
+    return a - b;
+}
+
+func int32 mul_i32(int32 a, int32 b)
+{
+    return a * b;
+}
+
+func int64 add_i64(int64 a, int64 b)
+{
+    return a + b;
+}
+
+func int64 sub_i64(int64 a, int64 b)
+{
+    return a - b;
+}
+
+func int64 mul_i64(int64 a, int64 b)
+{
+    return a * b;
+}
+
+func int64 abs_i64(int64 a)
+{
+    if (a < 0){
+        return -a;
+    }
+    return a;
+}
+
+func int64 clamp(int64 val, int64 lo, int64 hi)
+{
+    if (val < lo){
+        return lo;
+    }
+    if (val > hi){
+        return hi;
+    }
+    return val;
+}
+
+func int64 square(int64 n)
+{
+    return n * n;
+}
+
+func int64 cube(int64 n)
+{
+    return n * n * n;
+}
+
+func bool is_even(int64 n)
+{
+    return (n & 1) == 0;
+}
+
+func bool is_odd(int64 n)
+{
+    return (n & 1) != 0;
+}
+
+func int64 factorial(int64 n)
+{
+    if (n <= 1){
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+func int64 fibonacci(int64 n)
+{
+    if (n <= 0){ return 0; }
+    if (n == 1){ return 1; }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+func int64 gcd(int64 a, int64 b)
+{
+    if (b == 0){
+        return a;
+    }
+    return gcd(b, a % b);
+}
+
+func int64 lcm(int64 a, int64 b)
+{
+    return (a / gcd(a, b)) * b;
+}
+
+func int64 power(int64 base, int64 exp)
+{
+    if (exp == 0){ return 1; }
+    if (exp == 1){ return base; }
+    int64 half = power(base, exp / 2);
+    if (is_even(exp)){
+        return half * half;
+    }
+    return base * half * half;
+}
+
+func bool is_prime(int64 n)
+{
+    if (n < 2){ return false; }
+    if (n == 2){ return true; }
+    if (is_even(n)){ return false; }
+    int64 i = 3;
+    while (i * i <= n){
+        if (n % i == 0){ return false; }
+        i = i + 2;
+    }
+    return true;
+}
+
+func int64 sum_range(int64 lo, int64 hi)
+{
+    int64 acc = 0;
+    for (int64 i = lo; i <= hi; i++){
+        acc = acc + i;
+    }
+    return acc;
+}
+
+func int64 product_range(int64 lo, int64 hi)
+{
+    int64 acc = 1;
+    for (int64 i = lo; i <= hi; i++){
+        acc = acc * i;
+    }
+    return acc;
+}
+
+func int64 count_primes_up_to(int64 limit)
+{
+    int64 count = 0;
+    for (int64 i = 2; i <= limit; i++){
+        if (is_prime(i)){
+            count = count + 1;
+        }
+    }
+    return count;
+}
+
+// ===================== BIT MANIPULATION =====================
+
+func uint64 bit_set(uint64 val, uint8 pos)
+{
+    return val | (1 << pos);
+}
+
+func uint64 bit_clear(uint64 val, uint8 pos)
+{
+    return val & ~(1 << pos);
+}
+
+func uint64 bit_toggle(uint64 val, uint8 pos)
+{
+    return val ^ (1 << pos);
+}
+
+func bool bit_check(uint64 val, uint8 pos)
+{
+    return (bool)(val >> pos) & 1;
+}
+
+func uint8 popcount(uint64 val)
+{
+    uint8 count = 0;
+    while (val != 0){
+        count = count + (uint8)(val & 1);
+        val = val >> 1;
+    }
+    return count;
+}
+
+func uint64 rotate_left(uint64 val, uint8 n)
+{
+    return (val << n) | (val >> (64 - n));
+}
+
+func uint64 rotate_right(uint64 val, uint8 n)
+{
+    return (val >> n) | (val << (64 - n));
+}
+
+func uint64 reverse_bits(uint64 val)
+{
+    uint64 result = 0;
+    for (uint8 i = 0; i < 64; i++){
+        result = (result << 1) | (val & 1);
+        val = val >> 1;
+    }
+    return result;
+}
+
+// ===================== VEC2 OPERATIONS =====================
+// Vec2 is 8 bytes — pass/return as ptr<Vec2>
+
+func ptr<Vec2> vec2_make(int32 x, int32 y)
+{
+    ptr<Vec2> v = zalloc(sizeof(Vec2));
+    v->x = x;
+    v->y = y;
+    return v;
+}
+
+func ptr<Vec2> vec2_add(ptr<Vec2> a, ptr<Vec2> b)
+{
+    ptr<Vec2> result = zalloc(sizeof(Vec2));
+    result->x = a->x + b->x;
+    result->y = a->y + b->y;
+    return result;
+}
+
+func ptr<Vec2> vec2_sub(ptr<Vec2> a, ptr<Vec2> b)
+{
+    ptr<Vec2> result = zalloc(sizeof(Vec2));
+    result->x = a->x - b->x;
+    result->y = a->y - b->y;
+    return result;
+}
+
+func ptr<Vec2> vec2_scale(ptr<Vec2> v, int32 s)
+{
+    ptr<Vec2> result = zalloc(sizeof(Vec2));
+    result->x = v->x * s;
+    result->y = v->y * s;
+    return result;
+}
+
+func int32 vec2_dot(ptr<Vec2> a, ptr<Vec2> b)
+{
+    return a->x * b->x + a->y * b->y;
+}
+
+func bool vec2_equal(ptr<Vec2> a, ptr<Vec2> b)
+{
+    return a->x == b->x && a->y == b->y;
+}
+
+// ===================== VEC3 OPERATIONS =====================
+// Vec3 is 12 bytes — pass/return as ptr<Vec3>
+
+func ptr<Vec3> vec3_make(int32 x, int32 y, int32 z)
+{
+    ptr<Vec3> v = zalloc(sizeof(Vec3));
+    v->x = x;
+    v->y = y;
+    v->z = z;
+    return v;
+}
+
+func ptr<Vec3> vec3_add(ptr<Vec3> a, ptr<Vec3> b)
+{
+    ptr<Vec3> result = zalloc(sizeof(Vec3));
+    result->x = a->x + b->x;
+    result->y = a->y + b->y;
+    result->z = a->z + b->z;
+    return result;
+}
+
+func ptr<Vec3> vec3_cross(ptr<Vec3> a, ptr<Vec3> b)
+{
+    ptr<Vec3> result = zalloc(sizeof(Vec3));
+    result->x = a->y * b->z - a->z * b->y;
+    result->y = a->z * b->x - a->x * b->z;
+    result->z = a->x * b->y - a->y * b->x;
+    return result;
+}
+
+func int32 vec3_dot(ptr<Vec3> a, ptr<Vec3> b)
+{
+    return a->x * b->x + a->y * b->y + a->z * b->z;
+}
+
+// ===================== MATRIX OPERATIONS =====================
+// Matrix2x2 is 16 bytes — pass/return as ptr<Matrix2x2>
+
+func ptr<Matrix2x2> mat2_make(int32 a, int32 b, int32 c, int32 d)
+{
+    ptr<Matrix2x2> m = zalloc(sizeof(Matrix2x2));
+    m->a = a;
+    m->b = b;
+    m->c = c;
+    m->d = d;
+    return m;
+}
+
+func ptr<Matrix2x2> mat2_mul(ptr<Matrix2x2> x, ptr<Matrix2x2> y)
+{
+    ptr<Matrix2x2> result = zalloc(sizeof(Matrix2x2));
+    result->a = x->a * y->a + x->b * y->c;
+    result->b = x->a * y->b + x->b * y->d;
+    result->c = x->c * y->a + x->d * y->c;
+    result->d = x->c * y->b + x->d * y->d;
+    return result;
+}
+
+func int32 mat2_det(ptr<Matrix2x2> m)
+{
+    return m->a * m->d - m->b * m->c;
+}
+
+func ptr<Matrix2x2> mat2_transpose(ptr<Matrix2x2> m)
+{
+    ptr<Matrix2x2> result = zalloc(sizeof(Matrix2x2));
+    result->a = m->a;
+    result->b = m->c;
+    result->c = m->b;
+    result->d = m->d;
+    return result;
+}
+
+// ===================== POINTER / HEAP OPS =====================
+
+func ptr<ListNode> list_make_node(int64 val)
+{
+    ptr<ListNode> node = zalloc(sizeof(ListNode));
+    node->value = val;
+    node->next = null;
+    return node;
+}
+
+func ptr<ListNode> list_prepend(ptr<ListNode> head, int64 val)
+{
+    ptr<ListNode> node = list_make_node(val);
+    node->next = head;
+    return node;
+}
+
+func int64 list_sum(ptr<ListNode> head)
+{
+    int64 acc = 0;
+    ptr<ListNode> cur = head;
+    while (cur != null){
+        acc = acc + cur->value;
+        cur = cur->next;
+    }
+    return acc;
+}
+
+func uint64 list_len(ptr<ListNode> head)
+{
+    uint64 count = 0;
+    ptr<ListNode> cur = head;
+    while (cur != null){
+        count = count + 1;
+        cur = cur->next;
+    }
+    return count;
+}
+
+func ptr<ListNode> list_reverse(ptr<ListNode> head)
+{
+    ptr<ListNode> prev = null;
+    ptr<ListNode> cur = head;
+    while (cur != null){
+        ptr<ListNode> next = cur->next;
+        cur->next = prev;
+        prev = cur;
+        cur = next;
+    }
+    return prev;
+}
+
+func bool list_contains(ptr<ListNode> head, int64 val)
+{
+    ptr<ListNode> cur = head;
+    while (cur != null){
+        if (cur->value == val){
+            return true;
+        }
+        cur = cur->next;
+    }
+    return false;
+}
+
+func ptr<TreeNode> tree_make_node(int64 val)
+{
+    ptr<TreeNode> node = zalloc(sizeof(TreeNode));
+    node->value = val;
+    node->left = null;
+    node->right = null;
+    return node;
+}
+
+func ptr<TreeNode> tree_insert(ptr<TreeNode> root, int64 val)
+{
+    if (root == null){
+        return tree_make_node(val);
+    }
+    if (val < root->value){
+        root->left = tree_insert(root->left, val);
+    }
+    elseif (val > root->value){
+        root->right = tree_insert(root->right, val);
+    }
+    return root;
+}
+
+func bool tree_search(ptr<TreeNode> root, int64 val)
+{
+    if (root == null){ return false; }
+    if (root->value == val){ return true; }
+    if (val < root->value){
+        return tree_search(root->left, val);
+    }
+    return tree_search(root->right, val);
+}
+
+func int64 tree_min(ptr<TreeNode> root)
+{
+    if (root->left == null){
+        return root->value;
+    }
+    return tree_min(root->left);
+}
+
+func int64 tree_max(ptr<TreeNode> root)
+{
+    if (root->right == null){
+        return root->value;
+    }
+    return tree_max(root->right);
+}
+
+func uint64 tree_height(ptr<TreeNode> root)
+{
+    if (root == null){ return 0; }
+    uint64 lh = tree_height(root->left);
+    uint64 rh = tree_height(root->right);
+    if (lh > rh){ return lh + 1; }
+    return rh + 1;
+}
+
+func uint64 tree_node_count(ptr<TreeNode> root)
+{
+    if (root == null){ return 0; }
+    return 1 + tree_node_count(root->left) + tree_node_count(root->right);
+}
+
+// ===================== SORTING =====================
+
+func void swap_i64(ptr<int64> a, ptr<int64> b)
+{
+    int64 tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+func void bubble_sort(ptr<int64> arr, uint64 len)
+{
+    for (uint64 i = 0; i < len; i++){
+        for (uint64 j = 0; j < len - i - 1; j++){
+            if (arr[j] > arr[j+1]){
+                swap_i64(&arr[j], &arr[j+1]);
+            }
+        }
+    }
+}
+
+func uint64 partition(ptr<int64> arr, uint64 lo, uint64 hi)
+{
+    int64 pivot = arr[hi];
+    uint64 i = lo;
+    for (uint64 j = lo; j < hi; j++){
+        if (arr[j] <= pivot){
+            swap_i64(&arr[i], &arr[j]);
+            i = i + 1;
+        }
+    }
+    swap_i64(&arr[i], &arr[hi]);
+    return i;
+}
+
+func void quicksort(ptr<int64> arr, uint64 lo, uint64 hi)
+{
+    if (lo >= hi){ return; }
+    uint64 p = partition(arr, lo, hi);
+    if (p > 0){
+        quicksort(arr, lo, p - 1);
+    }
+    quicksort(arr, p + 1, hi);
+}
+
+// ===================== STRING UTILITIES =====================
+
+func uint64 str_len(ptr<char> s)
+{
+    uint64 i = 0;
+    while (s[i] != 0){
+        i = i + 1;
+    }
+    return i;
+}
+
+func bool str_equal(ptr<char> a, ptr<char> b)
+{
+    uint64 i = 0;
+    while (a[i] != 0 && b[i] != 0){
+        if (a[i] != b[i]){ return false; }
+        i = i + 1;
+    }
+    return a[i] == b[i];
+}
+
+func void str_copy(ptr<char> dst, ptr<char> src)
+{
+    uint64 i = 0;
+    while (src[i] != 0){
+        dst[i] = src[i];
+        i = i + 1;
+    }
+    dst[i] = 0;
+}
+
+func void str_reverse(ptr<char> s)
+{
+    uint64 len = str_len(s);
+    uint64 lo = 0;
+    uint64 hi = len - 1;
+    while (lo < hi){
+        char tmp = s[lo];
+        s[lo] = s[hi];
+        s[hi] = tmp;
+        lo = lo + 1;
+        hi = hi - 1;
+    }
+}
+
+func bool str_starts_with(ptr<char> s, ptr<char> prefix)
+{
+    uint64 i = 0;
+    while (prefix[i] != 0){
+        if (s[i] != prefix[i]){ return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+func uint64 str_count_char(ptr<char> s, char c)
+{
+    uint64 count = 0;
+    uint64 i = 0;
+    while (s[i] != 0){
+        if (s[i] == c){ count = count + 1; }
+        i = i + 1;
+    }
+    return count;
+}
+
+// ===================== STATS =====================
+// Stats is 32 bytes — pass/return as ptr<Stats>
+
+func ptr<Stats> compute_stats(ptr<int64> arr, uint64 len)
+{
+    ptr<Stats> s = zalloc(sizeof(Stats));
+    s->count = len;
+    s->sum = 0;
+    s->min = arr[0];
+    s->max = arr[0];
+
+    for (uint64 i = 0; i < len; i++){
+        s->sum = s->sum + arr[i];
+        if (arr[i] < s->min){ s->min = arr[i]; }
+        if (arr[i] > s->max){ s->max = arr[i]; }
+    }
+    return s;
+}
+
+func int64 stats_mean(ptr<Stats> s)
+{
+    if (s->count == 0){ return 0; }
+    return s->sum / s->count;
+}
+
+// ===================== DEEPLY NESTED EXPRESSIONS =====================
+
+func int64 deep_expr_a(int64 a, int64 b, int64 c)
+{
+    return ((a + b) * (c - a)) / ((b + 1) * (c + 1)) + (a * b * c) - ((a - b) * (b - c));
+}
+
+func bool deep_expr_b(int64 x, int64 y, int64 z)
+{
+    return (x > 0 && y > 0 && z > 0) || (x < 0 && y < 0) || (x == 0 && z != y);
+}
+
+func int64 deep_expr_c(int64 n)
+{
+    return ((n >> 2) & 0xFF) | ((n << 4) ^ (n >> 1)) & ~(n | 0x0F);
+}
+
+func int64 chained_calls(int64 n)
+{
+    return clamp(square(abs_i64(n - 10)), 0, 10000) + power(2, clamp(n, 0, 10));
+}
+
+// ===================== COMPLEX CONTROL FLOW =====================
+
+func int64 collatz_steps(int64 n)
+{
+    int64 steps = 0;
+    while (n != 1){
+        if (is_even(n)){
+            n = n / 2;
+        }
+        else{
+            n = n * 3 + 1;
+        }
+        steps = steps + 1;
+    }
+    return steps;
+}
+
+func int64 nested_loops(int64 n)
+{
+    int64 acc = 0;
+    for (int64 i = 0; i < n; i++){
+        for (int64 j = 0; j < n; j++){
+            if (is_prime(i + j)){
+                acc = acc + i * j;
+            }
+            elseif (is_even(i) && is_odd(j)){
+                acc = acc - 1;
+            }
+            else{
+                acc = acc + 1;
+            }
+        }
+    }
+    return acc;
+}
+
+func int64 switch_like(int64 n)
+{
+    int64 result = 0;
+    if (n == 0){
+        result = 100;
+    }
+    elseif (n == 1){
+        result = 200;
+    }
+    elseif (n == 2){
+        result = 300;
+    }
+    elseif (n == 3){
+        result = factorial(10);
+    }
+    elseif (n == 4){
+        result = fibonacci(20);
+    }
+    elseif (n == 5){
+        result = gcd(12345, 6789);
+    }
+    elseif (n == 6){
+        result = power(2, 32);
+    }
+    elseif (n == 7){
+        result = sum_range(1, 100);
+    }
+    else{
+        result = -1;
+    }
+    return result;
+}
+
+func uint64 count_set_bits_range(uint64 lo, uint64 hi)
+{
+    uint64 total = 0;
+    for (uint64 i = lo; i <= hi; i++){
+        total = total + (uint64)popcount(i);
+    }
+    return total;
+}
+
+// ===================== HEAP-HEAVY FUNCTIONS =====================
+
+func ptr<ListNode> build_list(int64 start, int64 end)
+{
+    ptr<ListNode> head = null;
+    for (int64 i = start; i <= end; i++){
+        head = list_prepend(head, i);
+    }
+    return head;
+}
+
+func ptr<TreeNode> build_bst_from_range(int64 start, int64 end)
+{
+    ptr<TreeNode> root = null;
+    int64 mid = (start + end) / 2;
+    root = tree_insert(root, mid);
+    for (int64 i = start; i <= end; i++){
+        if (i != mid){
+            root = tree_insert(root, i);
+        }
+    }
+    return root;
+}
+
+func ptr<Pair> make_pair(int64 a, int64 b)
+{
+    ptr<Pair> p = zalloc(sizeof(Pair));
+    p->first = a;
+    p->second = b;
+    return p;
+}
+
+func int64 pair_sum(ptr<Pair> p)
+{
+    return p->first + p->second;
+}
+
+func int64 pair_product(ptr<Pair> p)
+{
+    return p->first * p->second;
+}
+
+// ===================== CROSS-REFERENCING FUNCTIONS =====================
+
+func int64 stress_math(int64 n)
+{
+    int64 a = factorial(n % 10 + 1);
+    int64 b = fibonacci(n % 15);
+    int64 c = gcd(a, b + 1);
+    int64 d = lcm(c, n + 1);
+    int64 e = power(2, n % 8);
+    return clamp(a + b - c + d - e, -1000000, 1000000);
+}
+
+func uint64 stress_bits(uint64 n)
+{
+    uint64 a = bit_set(n, 3);
+    uint64 b = bit_clear(a, 7);
+    uint64 c = bit_toggle(b, 15);
+    uint64 d = rotate_left(c, 4);
+    uint64 e = rotate_right(d, 2);
+    return (uint64)popcount(e) + (uint64)popcount(reverse_bits(e));
+}
+
+func int64 stress_objects(int32 n)
+{
+    ptr<Vec2> v1 = vec2_make(n, n * 2);
+    ptr<Vec2> v2 = vec2_make(n * 3, n - 1);
+    ptr<Vec2> v3 = vec2_add(v1, v2);
+    ptr<Vec2> v4 = vec2_scale(v3, 2);
+    ptr<Vec3> u1 = vec3_make(v4->x, v4->y, n);
+    ptr<Vec3> u2 = vec3_make(n, v1->x, v2->y);
+    ptr<Vec3> u3 = vec3_cross(u1, u2);
+    ptr<Matrix2x2> m = mat2_make(v1->x, v2->x, u1->y, u2->z);
+    ptr<Matrix2x2> mt = mat2_transpose(m);
+    ptr<Matrix2x2> mm = mat2_mul(m, mt);
+    return (int64)(mat2_det(mm) + vec3_dot(u2, u3) + vec2_dot(v3, v4));
+}
+
+func int64 stress_pointers(int64 n)
+{
+    ptr<ListNode> list = build_list(1, n);
+    int64 s = list_sum(list);
+    uint64 l = list_len(list);
+    ptr<ListNode> rev = list_reverse(list);
+    int64 rs = list_sum(rev);
+
+    ptr<TreeNode> tree = build_bst_from_range(1, n);
+    bool found = tree_search(tree, n / 2);
+    int64 tmin = tree_min(tree);
+    int64 tmax = tree_max(tree);
+    uint64 th = tree_height(tree);
+
+    int64 result = s + rs + (int64)l + (int64)th + tmin + tmax;
+    if (found){
+        result = result + 1;
+    }
+    return result;
+}
+
+// ===================== ENTRY POINT =====================
+
+func void main(uint64 argc, ptr<str> argv)
+{
+    // --- math ---
+    printf("factorial(10) = %li\n", factorial(10));
+    printf("fibonacci(20) = %li\n", fibonacci(20));
+    printf("gcd(270, 192) = %li\n", gcd(270, 192));
+    printf("lcm(12, 18)   = %li\n", lcm(12, 18));
+    printf("power(2, 16)  = %li\n", power(2, 16));
+    printf("primes <= 100 = %li\n", count_primes_up_to(100));
+    printf("sum(1..100)   = %li\n", sum_range(1, 100));
+
+    // --- bits ---
+    printf("popcount(0xFF)       = %hhu\n", popcount(0xFF));
+    printf("count_set_bits(0,63) = %lu\n", count_set_bits_range(0, 63));
+
+    // // --- control flow ---
+    printf("collatz(27) steps = %li\n", collatz_steps(27));
+    printf("nested_loops(8)   = %li\n", nested_loops(8));
+
+    // // --- objects ---
+    ptr<Vec2> va = vec2_make(3, 4);
+    ptr<Vec2> vb = vec2_make(1, 2);
+    ptr<Vec2> vc = vec2_add(va, vb);
+    printf("vec2_add = (%i, %i)\n", vc->x, vc->y);
+
+    ptr<Matrix2x2> m = mat2_make(1, 2, 3, 4);
+    printf("mat2_det = %i\n", mat2_det(m));
+
+    // // --- pointers ---
+    ptr<ListNode> list = build_list(1, 10);
+    printf("list sum(1..10) = %li\n", list_sum(list));
+
+    ptr<TreeNode> tree = build_bst_from_range(1, 15);
+    printf("tree height     = %lu\n", tree_height(tree));
+    printf("tree contains 7 = %B\n", tree_search(tree, 7));
+
+    // // --- stress ---
+    printf("stress_math(42)     = %li\n", stress_math(42));
+    printf("stress_bits(12345)  = %lu\n", stress_bits(12345));
+    printf("stress_objects(7)   = %li\n", stress_objects(7));
+    printf("stress_pointers(20) = %li\n", stress_pointers(20));
+
+    // // --- switch-like dispatch ---
+    for (int64 i = 0; i <= 8; i++){
+        printf("switch_like(%li) = %li\n", i, switch_like(i));
+    }
+
+    // --- deep expressions ---
+    printf("deep_expr_a(3,5,7)  = %li\n", deep_expr_a(3, 5, 7));
+    printf("deep_expr_c(0xABCD) = %li\n", deep_expr_c(0xABCD));
+    printf("chained_calls(15)   = %li\n", chained_calls(15));
+}

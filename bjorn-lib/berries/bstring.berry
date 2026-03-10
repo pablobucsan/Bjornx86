@@ -1,0 +1,29 @@
+
+
+
+// LAST UPDATE: 1/3/2026
+
+// DEFINES THE FOLLOWING FUNCTIONS
+
+// Returns the length of a string (null terminator does not count)
+forward func uint64 strlen(str s);
+
+// Compares two strings, returning true if they are equal, false otherwise
+forward func uint8 cmpstring(str s1, str s2);
+
+// Returns a copy of the passed string
+forward func str strdup(str s);
+
+// Turns a string into a lu number basing it off the base
+forward func uint64 strtolu(ptr<char> s, uint8 base);
+
+// Returns a new string that is the concatenation of s1 and s2
+forward func str strcat(str s1, str s2);
+
+// Returns a new string with its content being formatted through va_list
+forward func str vsprintf(ptr<char> fmt, ptr<VA_list> va_list);
+
+// Returns a new string with its content being formatted through direct varargs
+forward func str sprintf(ptr<char> fmt, varargs);
+
+

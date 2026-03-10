@@ -1,0 +1,108 @@
+
+
+// LAST UPDATE: 1/3/2026
+
+// DEFINES THE FOLLOWING ENUMS
+
+enum __BuiltInType
+{
+    __TYPE_U8,
+    __TYPE_U16,
+    __TYPE_U32,
+    __TYPE_U64,
+    __TYPE_I8,
+    __TYPE_I16,
+    __TYPE_I32,
+    __TYPE_I64,
+    __TYPE_CHAR,
+    __TYPE_STR,
+    __TYPE_BOOL,
+    __TYPE_PTR
+}
+
+
+// DEFINES THE FOLLOWING OBJECTS
+object __BoxedValue
+{
+    __BuiltInType type;
+    union{
+        uint8 u8;
+        uint16 u16;
+        uint32 u32;
+        uint64 u64;
+        int8 i8;
+        int16 i16;
+        int32 i32;
+        int64 i64;
+        char c;
+        str s;
+        bool b;
+        ptr<void> p;
+    };
+}
+
+object VA_list
+{
+    uint64 count;
+    uint64 position;
+    ptr<ptr<__BoxedValue>> values;
+    ptr<void> first;
+}
+
+
+// DEFINES THE FOLLOWING FUNCTIONS
+
+// Returns a pointer to the first variadic argument given how many there are
+extern func ptr<void> varg_start(uint64 count);
+
+// Advances to the next argument
+forward func ptr<void> varg_next(ptr<void> curr);
+
+// Returns how many variadic arguments are based on the format string
+forward func uint64 varg_count(str fmt);
+
+// Creates a VA_list object based on the format string and the first variadic argument
+forward func ptr<VA_list> varg_create(str fmt, ptr<void> args);
+
+// Resets va_list position to 0, effectively pointing to the first argument again
+forward func void varg_reset(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a uint8 format. Advances to the next argument
+forward func uint8 varg_getu8(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a uint16 format. Advances to the next argument
+forward func uint16 varg_getu16(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a uint32 format. Advances to the next argument
+forward func uint32 varg_getu32(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a uint64 format. Advances to the next argument
+forward func uint64 varg_getu64(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a int8 format. Advances to the next argument
+forward func int8 varg_geti8(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a int16 format. Advances to the next argument
+forward func int16 varg_geti16(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a int32 format. Advances to the next argument
+forward func int32 varg_geti32(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a int64 format. Advances to the next argument
+forward func int64 varg_geti64(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a char format. Advances to the next argument
+forward func char varg_getchar(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a str format. Advances to the next argument
+forward func str varg_getstr(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a bool format. Advances to the next argument
+forward func bool varg_getbool(ptr<VA_list> va_list);
+
+// Returns the argument at va_list->position in a pointer format. Advances to the next argument
+forward func ptr<void> varg_getptr(ptr<VA_list> va_list);
+
+// Frees the object
+forward func void varg_free(ptr<VA_list> va_list);
+

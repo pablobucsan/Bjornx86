@@ -1,21 +1,20 @@
 
-// #use "libraries/user_libs/bstdio.bjo"
-// #use "libraries/user_libs/bstdlib.bjo"
-// #use "libraries/user_libs/bstring.bjo"
+#use "bstdio.berry"
 
 
-object Foo
+func int64 foo()
 {
-    uint32 weird;
-}
+    int64 x = 10;
+    int64 y = 4;
+    int64 z = x / (y + 1);
 
-func uint32 Nolose()
-{
-    ptr<Foo> f;
-    return 0x40 + f->weird;
+
+    return z;
 }
 
 func void main(uint64 argc, ptr<str> argv)
 {
-
+    int64 result = foo();
+    printf("result = %li\n", result);
 }
+

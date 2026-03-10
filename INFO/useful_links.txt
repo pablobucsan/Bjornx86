@@ -10,5 +10,6 @@ https://elixir.bootlin.com/linux/v6.17/source/fs
 3: ASCII VALUES
 https://www.ascii-code.com/
 
-4: ELF 
+4: ELF and .O FILES
 https://wiki.osdev.org/ELF
+https://refspecs.linuxfoundation.org/elf/elf.pdf

@@ -1,100 +1,97 @@
-# Compiler settings
-CC = gcc
-CFLAGS = -I$(INCLUDE_DIR)  
-# CFLAGS = -I$(INCLUDE_DIR)
-LDFLAGS =
-AS = nasm
-ASFLAGS = -f elf64
-LD = ld
+# === Compiler Settings ===
+CC      = gcc -O3
+CFLAGS  = -I$(INCLUDE_DIR)
 
-# Directories
-SRC_DIR = src
-INCLUDE_DIR = include
-OBJ_DIR = obj
+# === Paths ===
 COMPILER_DIR = compiler
-ASM_LIB_DIR = libraries/asm_user_libs
-OBJ_LIB_DIR = libraries/obj_user_libs
-OUTPUT_DIR = output
+INCLUDE_DIR  = $(COMPILER_DIR)/include
+SRC_DIR      = $(COMPILER_DIR)/src
+OBJ_DIR      = $(COMPILER_DIR)/obj
 
-# Files
-TARGET = bjornc
-SRC_FILES = $(wildcard $(SRC_DIR)/*.c)
-OBJ_FILES = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_FILES))
-ASM_LIB_FILES = $(wildcard $(ASM_LIB_DIR)/*.asm)
-OBJ_LIB_FILES = $(patsubst $(ASM_LIB_DIR)/%.asm,$(OBJ_LIB_DIR)/%.o,$(ASM_LIB_FILES))
+INSTALL_BIN_DIR = /usr/local/bin
+INSTALL_LIB_DIR = /usr/local/lib/bjorn
 
-# Default rule
+# === Sources & Objects ===
+SRC_FILES = $(COMPILER_DIR)/main.c \
+            $(wildcard $(SRC_DIR)/backend/*.c) \
+            $(wildcard $(SRC_DIR)/frontend/*.c) \
+            $(wildcard $(SRC_DIR)/misc/*.c)
+
+OBJ_FILES = $(patsubst $(COMPILER_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRC_FILES))
+
+TARGET = bjornc2
+
+
+
+# === Bjorn Standard Library ===
+BJORN_LIB_DIR = bjorn-lib
+BJORN_SRC_DIR = $(BJORN_LIB_DIR)/src
+BJORN_ASM_DIR = $(BJORN_LIB_DIR)/asm
+BJORN_ASM_EXTERN_DIR = $(BJORN_LIB_DIR)/asm_extern
+BJORN_CUB_DIR = $(BJORN_LIB_DIR)/cubs
+
+
+# === Default ===
 .PHONY: all
-all: $(COMPILER_DIR)/$(TARGET) compile_libs compile build_exe
+all: build
 
-# Build compiler
-$(COMPILER_DIR)/$(TARGET): $(OBJ_FILES) | $(COMPILER_DIR)
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+# === Build Compiler ===
+.PHONY: build
+build: $(TARGET)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+$(TARGET): $(OBJ_FILES)
+	$(CC) $(CFLAGS) $^ -o $@
+
+$(OBJ_DIR)/%.o: $(COMPILER_DIR)/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Compile asm libs
-compile_libs: $(OBJ_LIB_FILES)
 
-$(OBJ_LIB_DIR)/%.o: $(ASM_LIB_DIR)/%.asm | $(OBJ_LIB_DIR)
-	$(AS) $(ASFLAGS) $< -o $@
+.PHONY: stdlib
+stdlib: stdlib-asm stdlib-cub
 
-# === Generate .asm ===
-# We tell bjornc to write:   $(OUTPUT_DIR)/$(OUTPUT_SCRIPT)
-compile: $(COMPILER_DIR)/$(TARGET) | $(OUTPUT_DIR)
-	./$(COMPILER_DIR)/$(TARGET) -nl $(SCRIPT) $(OUTPUT_DIR)/$(OUTPUT_SCRIPT)
+.PHONY: stdlib-asm
+stdlib-asm:
+	@echo "=== Compiling .bjo -> .asm ==="
+	@mkdir -p $(BJORN_ASM_DIR)
+	@rm -rf saved-temps/bjornc
+	bjornc2 -s -save-temps $(BJORN_SRC_DIR)/*.bjo
+	@cp saved-temps/bjornc/*.asm $(BJORN_ASM_DIR)/
+	@echo "=== Done: .asm files in $(BJORN_ASM_DIR) ==="
 
-# === Assemble ===
-# Input:  $(OUTPUT_DIR)/$(OUTPUT_SCRIPT).asm
-# Output: $(OUTPUT_DIR)/$(OUTPUT_SCRIPT).o
-$(OUTPUT_DIR)/$(OUTPUT_SCRIPT).o: $(OUTPUT_DIR)/$(OUTPUT_SCRIPT).asm | $(OUTPUT_DIR)
-	$(AS) $(ASFLAGS) $< -o $@
+.PHONY: stdlib-cub
+stdlib-cub:
+	@echo "=== Assembling .asm -> .cub ==="
+	@mkdir -p $(BJORN_CUB_DIR)
+	bjornas $(BJORN_ASM_DIR)/*.asm $(BJORN_ASM_EXTERN_DIR)/*.asm -cub $(BJORN_CUB_DIR)
+	@echo "=== Done: .cub files in $(BJORN_CUB_DIR) ==="
 
-# === Link ===
-# Input:  $(OUTPUT_DIR)/$(OUTPUT_SCRIPT).o + library objects
-# Output: $(OUTPUT_DIR)/$(OUTPUT_SCRIPT)   ← final exe, no extension
-build_exe: $(OUTPUT_DIR)/$(OUTPUT_SCRIPT).o $(OBJ_LIB_FILES) | $(OUTPUT_DIR)
-	$(LD) $(LDFLAGS) $< $(OBJ_LIB_FILES) -o $(OUTPUT_DIR)/$(OUTPUT_SCRIPT)
 
-# Convenience target: full pipeline
-.PHONY: exe
-exe: build_exe
-
-# Run the result
-run_exe: build_exe
-	./$(OUTPUT_DIR)/$(OUTPUT_SCRIPT)
-
-# Directory creation
-$(OBJ_DIR) $(COMPILER_DIR) $(OBJ_LIB_DIR) $(OUTPUT_DIR):
-	mkdir -p $@
-
-# Clean rules
-.PHONY: clean clean_bjorn clean_libs clean_output
-clean: clean_bjorn clean_libs clean_output
-
-clean_bjorn: ; rm -rf $(OBJ_DIR) $(COMPILER_DIR)
-clean_libs:  ; rm -rf $(OBJ_LIB_DIR)
-clean_output:; rm -rf $(OUTPUT_DIR)
-
-# Deployment (auto-link version)
+# === Deploy ===
 .PHONY: deploy
-deploy: all compile_libs
-	@echo "=== Deploying Bjorn compiler and standard libraries ==="
-	@mkdir -p $(INSTALL_BIN_DIR) $(INSTALL_STD_DIR) $(INSTALL_OBJ_DIR)
-	@cp $(COMPILER_DIR)/$(TARGET) $(INSTALL_BIN_DIR)/bjornc
-	@chmod +x $(INSTALL_BIN_DIR)/bjornc
-	@cp -r $(wildcard libraries/user_libs/*.bjo) $(INSTALL_STD_DIR)/
-	@cp -r $(wildcard $(OBJ_LIB_DIR)/*.o) $(INSTALL_OBJ_DIR)/ 2>/dev/null || true
-	@echo "=== Deployment complete! ==="
-	@echo "Compiler installed to $(INSTALL_BIN_DIR)/bjornc"
-	@echo "Standard library sources copied to $(INSTALL_STD_DIR)/"
-	@echo "Compiled extern objects copied to $(INSTALL_OBJ_DIR)/"
+deploy: build stdlib
+	@echo "=== Deploying bjornc2 compiler ==="
+	@mkdir -p $(INSTALL_BIN_DIR)
+	@cp $(TARGET) $(INSTALL_BIN_DIR)/bjornc2
+	@chmod +x $(INSTALL_BIN_DIR)/bjornc2
+	@echo "=== Deploying bjorn-lib ==="
+	@rm -rf $(INSTALL_LIB_DIR)
+	@mkdir -p $(INSTALL_LIB_DIR)
+	@cp -r bjorn-lib/* $(INSTALL_LIB_DIR)/
+	@echo "=== Setting BJORN_LIB_PATH ==="
+	@if ! grep -q "BJORN_LIB_PATH" $(HOME)/.bashrc; then \
+		echo 'export BJORN_LIB_PATH=/usr/local/lib/bjorn' >> $(HOME)/.bashrc; \
+		echo "Added BJORN_LIB_PATH to ~/.bashrc"; \
+	else \
+		echo "BJORN_LIB_PATH already set in ~/.bashrc, skipping"; \
+	fi
+	@echo "=============================="
+	@echo "Done!"
+	@echo "Compiler  → $(INSTALL_BIN_DIR)/bjornc2"
+	@echo "Libraries → $(INSTALL_LIB_DIR)"
+	@echo "Run 'source ~/.bashrc' or open a new terminal to apply BJORN_LIB_PATH"
 
-	
-INSTALL_BIN_DIR  := $(HOME)/bin
-INSTALL_STD_DIR  := $(HOME)/bjorn-std
-INSTALL_OBJ_DIR  := $(INSTALL_STD_DIR)/obj
-
-
-#make SCRIPT=test.bjo OUTPUT_SCRIPT=test
+# === Clean ===
+.PHONY: clean
+clean:
+	rm -rf $(OBJ_DIR) $(TARGET)

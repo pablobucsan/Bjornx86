@@ -1,0 +1,40 @@
+
+
+
+// LAST UPDATE: 1/3/2026
+
+
+
+// DEFINES THE FOLLOWING VALUES
+ptr<void> null = (ptr<void>)0;
+
+
+// DEFINES THE FOLLOWING FUNCTIONS
+
+// Exits execution
+extern func void exit(int32 code);
+
+// Copies a block of memory of 'size' bytes from src to dst
+extern func void memcpy(ptr<void> dst, ptr<void> src, uint64 size);
+
+// Allocates a multiple of 4096B (4KB) bigger than or equal to 'len' of memory with the specified protection and flags
+// If flag contains ANONYMOUS, then the fd must be -1 (no file)
+extern func ptr<void> mmap(ptr<void> addr, uint64 len, uint64 prot, uint64 flags , uint64 fd, uint64 off);
+
+// Sets 'count' bytes starting at 'dst' with the provided value
+extern func void memset(ptr<void> dst, char value, uint64 count);
+
+
+// Allocates a memory block big enough to store the requested size and returns a pointer to it
+forward func ptr<void> malloc(uint64 requested_size);
+
+// Frees the provided pointer, will stop execution on double free detected
+forward func void free(ptr<void> p);
+
+// Reallocates the provided pointer to a new block big enough to hold the new size
+forward func ptr<void> realloc(ptr<void> p, uint64 new_size);
+
+// Allocates and fills with zero the region allocated and returns a pointer to it
+forward func ptr<void> zalloc(uint64 size);
+
+
