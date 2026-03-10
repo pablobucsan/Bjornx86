@@ -22,6 +22,7 @@ void printHelp()
 "-save-temps        Saves every intermediate file (.asm and .cub files) into saved-temps/bjornc and saved-temps/bjornas\n"
 "-s                 Produces and saves the .asm generated file(s), does not assemble nor link\n"
 "-c                 Produces and saves the .asm and .cub generated file(s), does not link\n"
+"-self              Assembles with bjornas2 and links with bjornlk2, instead of bjornas and bjornlk\n"
 "-o <exename>       Names the final executable file to <exename>.elf\n";
 
     printf("%s", help);
