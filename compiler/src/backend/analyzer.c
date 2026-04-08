@@ -548,7 +548,7 @@ Label *cloneLabel(Label *l)
         return NULL;
     }
 
-    Label *clone;
+    Label *clone = NULL;
     // printf("Cloning label.\n");
     // printf("with kind = %i\n", l->kind);
 
@@ -571,6 +571,11 @@ Label *cloneLabel(Label *l)
         {
             clone = makeTagLabel(l->tag.tag_name);
             break;
+        }
+        default:
+        {
+            fprintf(stderr, "Unknown label kind to clone, got: %i\n", l->kind);
+            exit(1);
         }
     }
 

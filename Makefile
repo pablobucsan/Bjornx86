@@ -55,7 +55,7 @@ stdlib-asm:
 	@echo "=== Compiling .bjo -> .asm ==="
 	@mkdir -p $(BJORN_ASM_DIR)
 	@rm -rf saved-temps/bjornc
-	bjornc2 -s -save-temps $(BJORN_SRC_DIR)/*.bjo
+	./bjornc2 -s -save-temps $(BJORN_SRC_DIR)/*.bjo
 	@cp saved-temps/bjornc/*.asm $(BJORN_ASM_DIR)/
 	@echo "=== Done: .asm files in $(BJORN_ASM_DIR) ==="
 

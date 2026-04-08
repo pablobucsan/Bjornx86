@@ -401,9 +401,15 @@ Operand *load_imm(FILE *asm_file, size_t size, ASTNode *imm_node)
     {
         switch (curr_exp->registerType)
         {
-            case ANY:
-            case GPR: reg = getGPR(asm_file, curr_exp->size); break;
-            case FPR: reg = getFPR(curr_exp->size); break;
+            case FPR: {
+                reg = getFPR(curr_exp->size); 
+                break;
+            }
+
+            default: {
+                reg = getGPR(asm_file, curr_exp->size); 
+                break;
+            }
         }
     }
 
@@ -2583,8 +2589,8 @@ void buildData(FILE *asm_file, ASTNode *program, SymbolTable *current_st, Functi
             int count = program->enum_node.declaration_count;
 
             uint64_t current_index = 0;
-            char *fmt;
-            char *size_word;
+            char *fmt = "";
+            char *size_word = "";
             // Check the base type to see what format we need to use 
             if (isTypeUnsignedInt(program->enum_node.base_type)){
                 switch(program->enum_node.base_type->numberType.bytes)

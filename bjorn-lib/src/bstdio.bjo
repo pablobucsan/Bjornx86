@@ -46,8 +46,8 @@ func uint32 freadBytes(ptr<File> f, ptr<char> buf, uint32 bytes)
 
 func ptr<char> freadAll(ptr<File> f)
 {
-    // Initial chunk of 256 that will double if we run out of space
-    uint32 buf_size = 256;
+    // Initial chunk of 64KB that will double if we run out of space
+    uint32 buf_size = 65536;
     bool keep_reading = true;
     uint32 index = 0;
     ptr<char> buf = malloc((uint64)buf_size);

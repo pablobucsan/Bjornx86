@@ -21,8 +21,13 @@ OutputStash *ostash = NULL;
 int mkdir_p(const char *path)
 {
     char tmp[PATH_MAX];
-    strncpy(tmp, path, sizeof(tmp));
-    tmp[sizeof(tmp) - 1] = '\0';
+
+    /* Safely copy with guaranteed null-termination and truncation detection */
+    if (snprintf(tmp, sizeof(tmp), "%s", path) >= (int)sizeof(tmp)) {
+        fprintf(stderr, "mkdir_p: path too long (max %zu bytes): %s\n", 
+                sizeof(tmp)-1, path);
+        return -1;
+    }
 
     for (char *p = tmp + 1; *p; p++){
         if (*p == '/'){
@@ -318,7 +323,7 @@ void bjornc(InputFile *ifile)
     }
     else{  /** We dont want to keep them, write to temp */
         is_temp = 1;
-        char template[] = "/tmp/bjornc-XXXXXX";
+        char *template = strdup("/tmp/bjornc-XXXXXX");
         directory = mkdtemp(template);
         if (directory == NULL){
             /** Failed to make temporary dir */
@@ -346,7 +351,7 @@ void bjornc(InputFile *ifile)
     
     // printf("Made a bfile with path: '%s'\n", bfile->path_to_result);
     // printf("Finished bjornc\n");
-
+    // printf("Number of ASTs: %i\n",ast_count);
 
 }
 
@@ -369,7 +374,7 @@ void bjornas()
     }
     else{
         is_temp = 1;
-        char template[] = "/tmp/bjornas-XXXXXX";
+        char *template = strdup("/tmp/bjornas-XXXXXX");
         directory = strdup(mkdtemp(template));
         if (directory == NULL){
             /** Failed to make temporary dir */
@@ -404,7 +409,7 @@ void bjornas()
 
         
         /** Create the boxed cub file and push it */
-        size_t filepath_len = strlen(directory) + strlen(ostash->bfiles[i]->name) + strlen(".cub") + 1;
+        size_t filepath_len = strlen(directory) + strlen(ostash->bfiles[i]->name) + strlen(".cub") + 2; //for '/' and '\0
         char *filepath = malloc(filepath_len);
         memset(filepath, 0, filepath_len);
         // printf("Before: Assembling, dir = %s\n", directory);

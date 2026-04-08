@@ -19,6 +19,8 @@ UsedFiles *usedFiles = NULL;
 TypeTable *gb_typeTable = NULL;
 
 
+// int ast_count = 0;
+
 void initASTContext()
 {
     // Used files once per
@@ -1001,6 +1003,10 @@ char *updateTypeRepresentation(Type *t)
             strcat(buffer, t->udt.name);
             return buffer;
         }
+        default:{
+            fprintf(stderr, "Unknown type kind to update representation of. Got: %i\n", t->kind);
+            exit(1);
+        }
     }
 }
 // Parses a type out of tokens and adds recursively to the table
@@ -1594,6 +1600,8 @@ ASTNode *__allocateAST()
     ASTNode *ast = malloc(sizeof(ASTNode));
     memset(ast, 0, sizeof(ASTNode));
 
+    // ast_count++;
+
     return ast;
 }
 
@@ -1947,7 +1955,7 @@ ASTNode *parseClassDef(Token **tokens, int *token_pos)
             }
             default:{
                 printf("In file: '%s'. In L = %i. Unexpected statement in class def, only declarations, unions and functions are allowed, but got: '%s'.\n", 
-                    tracker.current_src_file, tracker.current_src_file, statementToStr(stmt_kind));
+                    tracker.current_src_file, tracker.current_line, statementToStr(stmt_kind));
                 exit(1);
                 break;
             }
@@ -4262,6 +4270,7 @@ char *statementToStr(StmtKind stmt_kind)
         case STMT_UNION: return "UNION";
         case STMT_USE_DIRECTIVE: return "USE_DIRECTIVE";
         case STMT_WHILE_LOOP: return "WHILE_LOOP";
+        default: return "UNKNOWN_STMT";
     }
 }
 

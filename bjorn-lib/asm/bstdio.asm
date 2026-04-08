@@ -132,7 +132,7 @@ _freadAll_pFile:
     mov rbp, rsp
     sub rsp, 40
     mov qword [rbp - 32], rdi
-    mov eax, 256
+    mov eax, 65536
     mov dword [rbp - 16], eax
     mov al, 1
     mov byte [rbp - 12], al

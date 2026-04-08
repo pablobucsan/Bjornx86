@@ -44,12 +44,12 @@
 #define INIT_ARRINIT_CAPACITY 10
 #define ARRINIT_RESIZE_FACTOR 2
 
+
 typedef struct ASTNode ASTNode;
 typedef struct Label Label;
 typedef struct Tag Tag;
 
-
-
+// extern int ast_count;
 
 /**
  * ===============================================================================
@@ -576,7 +576,6 @@ typedef struct ASTNode
     // useful for codegen
     Operand *operand;
 } ASTNode;
-
 
 
 

@@ -2,19 +2,9 @@
 #use "bstdio.berry"
 
 
-func int64 foo()
-{
-    int64 x = 10;
-    int64 y = 4;
-    int64 z = x / (y + 1);
-
-
-    return z;
-}
 
 func void main(uint64 argc, ptr<str> argv)
 {
-    int64 result = foo();
-    printf("result = %li\n", result);
+    printf("Hello, World\n");
 }
 
