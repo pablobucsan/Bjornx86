@@ -63,8 +63,40 @@ make build
 ```bash
 sudo make deploy
 ```
+This does the following:
 
-This builds bjornc2, compiles the standard library, and installs everything to `/usr/local/bin` and `/usr/local/lib/bjorn`.
+- Installs `bjornc2` to `/usr/local/bin`
+- Installs the standard library to `/usr/local/lib/bjorn`
+- Sets up the BJORN_LIB_PATH environment variable in `~/.bashrc`
+
+# Important note:
+`make deploy` does not build or install the assembler (`bjornas`) or the linker (`bjornlk`). Those live in their own repositories. You can get the binaries there. Link at the end.
+
+## How the full pipeline works
+When you run:
+`bjornc2 main.bjo`
+
+`bjornc2` will automatically:
+
+- Generate .asm files
+- Call `bjornas` internally to produce `.cub` object files
+- Call `bjornlk` internally to link everything into an ELF executable
+
+So after you have installed `bjornc2` and have `bjornas` + `bjornlk` available in your PATH, you can build with a single command. You could also use the self-hosted and self-built versions, `bjornas2` and `bjornlk2`, then you have to specifiy the `-self` flag to the compiler. Make sure to run `bjornc2 -h` for a bit more information. It is adviced to also take a look at the Makefile script to understand the deploy process, specifically when it comes to the runtime libraries, as they are assemblerd with `bjornas`. You are free to mess around with that.
+
+## Honest reality check
+
+This project is first and foremost a learning exercise. I built it to deeply understand how the entire toolchain works — from source code to final binary — without relying on external frameworks.
+Because of that goal:
+
+- The toolchain is not production-ready.
+- There are no optimisation passes (it targets correctness at roughly -O0 level).
+- It only supports x86-64 Linux.
+- Some parts are still young and may contain rough edges.
+- The focus was on understanding and correctness, not speed or broad compatibility.
+
+If you're looking for a polished, ready-to-use toolchain, this is probably not it yet.
+If you're interested in how compilers, assemblers, and linkers actually work from first principles, then I hope this project is useful and I appreciate anyone taking the time to give it a try and bearing with my mistakes.
 
 ## Repository Structure
 
